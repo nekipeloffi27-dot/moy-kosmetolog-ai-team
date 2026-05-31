@@ -1,0 +1,36 @@
+# Secrets
+.env
+*.env.local
+.env.example
+*.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Skills (downloaded separately, not in repo)
+skills/
+
+# Runtime artifacts
+logs/
+*.log
+screenshots/
+mockups/
+
+# Docker
+.docker-data/

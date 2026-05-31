@@ -1,0 +1,60 @@
+name: kosmetolog-ai-team
+
+services:
+  bot:
+    build: .
+    container_name: ai-team-bot
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./:/app
+      - mockups:/app/mockups
+      - logs:/app/logs
+      # Bot needs to spawn dev-sandbox containers (M5) → access host Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Shared workspace for dev sandboxes to clone moy-kosmetolog into
+      - ${SANDBOX_WORKSPACE:-/var/ai-team-workspace}:/workspace
+    networks:
+      - ai-team-net
+
+  db:
+    image: postgres:16-alpine
+    container_name: ai-team-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-team-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-team-redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    networks:
+      - ai-team-net
+
+volumes:
+  pgdata:
+  redisdata:
+  mockups:
+  logs:
+
+networks:
+  ai-team-net:
+    driver: bridge
