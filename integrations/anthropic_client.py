@@ -27,7 +27,15 @@ def get_client() -> AsyncAnthropic:
     global _client
     if _client is None:
         settings = get_settings()
-        _client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        kwargs = {"api_key": settings.anthropic_api_key}
+        if settings.anthropic_proxy_url:
+            import httpx
+            kwargs["http_client"] = httpx.AsyncClient(
+                proxy=settings.anthropic_proxy_url,
+                timeout=httpx.Timeout(120.0, connect=10.0),
+            )
+            logger.info("Anthropic SDK: using HTTPS proxy")
+        _client = AsyncAnthropic(**kwargs)
     return _client
 
 

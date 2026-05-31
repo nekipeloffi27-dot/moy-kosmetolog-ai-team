@@ -8,7 +8,6 @@ anthropic>=0.50
 asyncpg>=0.30
 alembic>=1.14
 SQLAlchemy>=2.0          # alembic dependency only
-psycopg2-binary>=2.9
 
 # ─── Config & types ───────────────────────────────────
 pydantic>=2.10
@@ -24,3 +23,4 @@ jinja2>=3.1
 
 # ─── Logging ──────────────────────────────────────────
 loguru>=0.7
+psycopg2-binary>=2.9

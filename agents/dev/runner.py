@@ -194,6 +194,7 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
         "-e", f"BRANCH={branch}",
         "-e", f"DEFAULT_BRANCH={settings.github_default_branch}",
         "-e", f"ANTHROPIC_API_KEY={settings.anthropic_api_key}",
+        "-e", f"ANTHROPIC_PROXY_URL={settings.anthropic_proxy_url}",
         "-e", f"MODEL={model}",
         "-e", f"GH_TOKEN={settings.github_token}",
         "-e", f"TASK_TITLE={task.title}",

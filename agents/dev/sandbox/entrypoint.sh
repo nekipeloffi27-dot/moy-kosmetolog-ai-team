@@ -93,8 +93,14 @@ PROMPT_FILE=$(mktemp)
 cd "${WORKDIR}"
 log "Running Claude Code (model=${MODEL}, rerun=${IS_RERUN:-0})…"
 
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
-claude \
+PROXY_ENV=""
+if [[ -n "${ANTHROPIC_PROXY_URL:-}" ]]; then
+    PROXY_ENV="HTTPS_PROXY=${ANTHROPIC_PROXY_URL} HTTP_PROXY=${ANTHROPIC_PROXY_URL}"
+    log "Using HTTPS proxy for Claude Code"
+fi
+
+env ${PROXY_ENV} ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+    claude \
     --print \
     --model "${MODEL}" \
     --permission-mode acceptEdits \
