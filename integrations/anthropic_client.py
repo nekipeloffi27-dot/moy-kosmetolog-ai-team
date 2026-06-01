@@ -52,9 +52,11 @@ async def log_call(
     success: bool,
     error: str | None = None,
     task_id: UUID | None = None,
+    cache_creation_tokens: int = 0,
+    cache_read_tokens: int = 0,
 ) -> int:
     """Log an agent call. Returns cost in cents."""
-    cents = cost_cents(model, input_tokens, output_tokens)
+    cents = cost_cents(model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens)
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -143,8 +145,10 @@ async def _call_once(
     started = time.time()
     success = True
     error_text: str | None = None
-    in_tok = out_tok = 0
+    in_tok = out_tok = cache_create = cache_read = 0
     text_out = ""
+
+    system_blocks = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
 
     try:
         last_exc = None
@@ -157,7 +161,7 @@ async def _call_once(
                 resp = await client.messages.create(
                     model=model,
                     max_tokens=max_tokens,
-                    system=system,
+                    system=system_blocks,
                     messages=messages,
                 )
                 last_exc = None
@@ -170,6 +174,8 @@ async def _call_once(
             raise last_exc
         in_tok = resp.usage.input_tokens
         out_tok = resp.usage.output_tokens
+        cache_create = getattr(resp.usage, "cache_creation_input_tokens", 0) or 0
+        cache_read = getattr(resp.usage, "cache_read_input_tokens", 0) or 0
         text_out = "".join(
             block.text for block in resp.content if getattr(block, "type", None) == "text"
         )
@@ -184,11 +190,12 @@ async def _call_once(
             pool,
             feature_id=feature_id, task_id=task_id, agent=agent, model=model,
             input_tokens=in_tok, output_tokens=out_tok,
+            cache_creation_tokens=cache_create, cache_read_tokens=cache_read,
             duration_ms=duration_ms, success=success, error=error_text,
         )
         logger.info(
-            "Agent {} | model={} | in={} out={} | {} ms | ${:.4f}",
-            agent, model, in_tok, out_tok, duration_ms, cents / 100,
+            "Agent {} | model={} | in={} out={} | cache: create={} read={} | {} ms | ${:.4f}",
+            agent, model, in_tok, out_tok, cache_create, cache_read, duration_ms, cents / 100,
         )
 
     return text_out
@@ -213,23 +220,27 @@ async def _call_with_tools(
     current_messages = list(messages)
     all_text_parts: list[str] = []
 
+    system_blocks = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+
     for iteration in range(1, max_tool_iterations + 1):
         started = time.time()
         success = True
         error_text: str | None = None
-        in_tok = out_tok = 0
+        in_tok = out_tok = cache_create = cache_read = 0
         iter_label = f"{agent}:iter={iteration}"
 
         try:
             resp = await client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                system=system,
+                system=system_blocks,
                 messages=current_messages,
                 tools=tools,
             )
             in_tok = resp.usage.input_tokens
             out_tok = resp.usage.output_tokens
+            cache_create = getattr(resp.usage, "cache_creation_input_tokens", 0) or 0
+            cache_read = getattr(resp.usage, "cache_read_input_tokens", 0) or 0
         except Exception as e:
             success = False
             error_text = str(e)
@@ -251,11 +262,12 @@ async def _call_with_tools(
                     feature_id=feature_id, task_id=task_id,
                     agent=iter_label, model=model,
                     input_tokens=in_tok, output_tokens=out_tok,
+                    cache_creation_tokens=cache_create, cache_read_tokens=cache_read,
                     duration_ms=duration_ms, success=True,
                 )
                 logger.info(
-                    "Agent {} | model={} | in={} out={} | {} ms | ${:.4f}",
-                    iter_label, model, in_tok, out_tok, duration_ms, cents / 100,
+                    "Agent {} | model={} | in={} out={} | cache: create={} read={} | {} ms | ${:.4f}",
+                    iter_label, model, in_tok, out_tok, cache_create, cache_read, duration_ms, cents / 100,
                 )
 
         # Collect text and check for tool use

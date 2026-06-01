@@ -11,12 +11,27 @@ PRICING_PER_MTOK: dict[str, tuple[float, float]] = {
 }
 
 
-def cost_cents(model: str, input_tokens: int, output_tokens: int) -> int:
-    """Return cost in integer US cents (rounded up to avoid undercounting)."""
+def cost_cents(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int = 0,
+    cache_read_tokens: int = 0,
+) -> int:
+    """Return cost in integer US cents (rounded up to avoid undercounting).
+
+    cache_creation_tokens: written to cache, billed at 1.25× input price.
+    cache_read_tokens: read from cache, billed at 0.1× input price.
+    """
     if model not in PRICING_PER_MTOK:
         # Default to Opus rates to be safe
         in_price, out_price = PRICING_PER_MTOK["claude-opus-4-7"]
     else:
         in_price, out_price = PRICING_PER_MTOK[model]
-    cost_usd = (input_tokens * in_price + output_tokens * out_price) / 1_000_000
+    cost_usd = (
+        input_tokens * in_price
+        + output_tokens * out_price
+        + cache_creation_tokens * in_price * 1.25
+        + cache_read_tokens * in_price * 0.1
+    ) / 1_000_000
     return int(round(cost_usd * 100))
