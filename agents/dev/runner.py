@@ -8,6 +8,7 @@ adds commits to it, so the existing PR auto-updates.
 from __future__ import annotations
 
 import asyncio
+import os
 import shlex
 from pathlib import Path
 from uuid import UUID
@@ -114,7 +115,7 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
     short_id = str(feature.id)[:6]
     # Deterministic branch name — re-runs reuse the same branch and update the PR
     branch = task.branch_name or f"feat/{short_id}/{_slugify(task.title)}"
-    container_name = f"dev-{short_id}-{task.type.value}"
+    container_name = f"dev-{short_id}-{task.type.value}-{str(task.id)[:8]}"
 
     await update_task_status(pool, task.id, TaskStatus.IN_PROGRESS, branch_name=branch)
 
@@ -140,7 +141,12 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
     review_feedback = feature.context.get(f"review_feedback_{task.id}", "")
 
     prompts_dir = Path(settings.sandbox_workspace) / "prompts" / str(feature.id) / task.type.value
-    prompts_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = Path(settings.sandbox_workspace) / "work" / str(feature.id) / task.type.value
+    for d in (
+        prompts_dir.parent.parent, prompts_dir.parent, prompts_dir,
+        work_dir.parent.parent, work_dir.parent, work_dir,
+    ):
+        _ensure_writable(d)
 
     task_md = (
         f"# {task.title}\n\n"
@@ -202,7 +208,7 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
         "-e", f"ISSUE_NUMBER={task.github_issue_number or ''}",
         "-e", f"IS_RERUN={'1' if is_rerun else '0'}",
         "-v", f"{prompts_dir}:/prompts:ro",
-        "-v", f"{settings.sandbox_workspace}/work/{feature.id}/{task.type.value}:/workspace",
+        "-v", f"{work_dir}:/workspace",
     ]
 
     if settings.skills_enabled:
@@ -275,6 +281,14 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
+
+
+def _ensure_writable(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(path, 0o777)
+    except PermissionError as e:
+        logger.warning("Cannot chmod {}: {}", path, e)
 
 
 def _slugify(text: str) -> str:
