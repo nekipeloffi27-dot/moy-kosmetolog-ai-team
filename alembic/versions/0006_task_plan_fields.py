@@ -27,25 +27,25 @@ def upgrade() -> None:
         "affected_files",
         sa.dialects.postgresql.JSONB(),
         nullable=False,
-        server_default="'[]'",
+        server_default=sa.text("'[]'"),
     ))
     op.add_column("tasks", sa.Column(
         "changes_per_file",
         sa.dialects.postgresql.JSONB(),
         nullable=False,
-        server_default="'[]'",
+        server_default=sa.text("'[]'"),
     ))
     op.add_column("tasks", sa.Column(
         "do_not_touch",
         sa.dialects.postgresql.JSONB(),
         nullable=False,
-        server_default="'[]'",
+        server_default=sa.text("'[]'"),
     ))
     op.add_column("tasks", sa.Column(
         "references",
         sa.dialects.postgresql.JSONB(),
         nullable=False,
-        server_default="'[]'",
+        server_default=sa.text("'[]'"),
     ))
     op.add_column("tasks", sa.Column(
         "verification",
