@@ -173,7 +173,7 @@ async def get_global_report(pool: asyncpg.Pool, period: str) -> dict:
                 COALESCE(SUM(ac.cost_cents), 0)::int AS cost_cents
             FROM agent_calls ac
             JOIN features f ON ac.feature_id = f.id
-            WHERE ac.{where.replace('created_at', 'ac.created_at')}
+            WHERE {where.replace('created_at', 'ac.created_at')}
             GROUP BY f.id, f.title
             ORDER BY cost_cents DESC
             LIMIT 3
