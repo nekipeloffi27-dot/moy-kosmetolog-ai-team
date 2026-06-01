@@ -19,6 +19,8 @@ from uuid import UUID
 import asyncpg
 from loguru import logger
 
+from pathlib import Path
+
 from agents.base import load_context_files, load_prompt
 from core.bots import BotRegistry
 from core.config import get_settings
@@ -27,6 +29,9 @@ from core.orchestrator import dispatch, register_agent
 from core.state_machine import transition
 from integrations.anthropic_client import call_llm
 from integrations.github import list_pr_files, merge_pr, post_pr_comment
+from services.codebase import (
+    codebase_tool_executor, get_codebase_tools_spec, refresh_snapshot,
+)
 from services.features import get_feature, update_context
 from services.skills import load_skills_for
 from services.tasks import all_tasks_in_status, list_tasks, update_task_status
@@ -76,6 +81,19 @@ async def run_cto_review(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool
     )
 
     api_contract = feature.context.get("api_contract", {})
+
+    # ─── Codebase snapshot ───
+    snapshot_dir = Path(settings.codebase_snapshot_dir)
+    codebase_tools = None
+    executor = None
+    if snapshot_dir.exists():
+        try:
+            await refresh_snapshot()
+        except Exception as e:
+            logger.warning("Codebase snapshot refresh failed (continuing without): {}", e)
+        codebase_tools = get_codebase_tools_spec()
+        executor = codebase_tool_executor
+
     base_review_prompt = load_prompt("cto_review")
     skills_block = ""
     if settings.skills_enabled:
@@ -102,6 +120,8 @@ async def run_cto_review(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool
                 api_contract=api_contract,
                 review_prompt=review_prompt,
                 model=settings.model_cto_review,
+                codebase_tools=codebase_tools,
+                codebase_executor=executor,
             )
         except Exception as e:
             logger.exception("Review failed for task {}: {}", task.id, e)
@@ -210,6 +230,8 @@ async def _review_one_pr(
     api_contract: dict,
     review_prompt: str,
     model: str,
+    codebase_tools: list[dict] | None = None,
+    codebase_executor=None,
 ) -> dict:
     """Fetch PR diff, ask Claude for verdict, return parsed JSON."""
     pr_files = await list_pr_files(repo_ref, task.github_pr_number)
@@ -261,6 +283,8 @@ async def _review_one_pr(
         messages=[{"role": "user", "content": user_msg}],
         max_tokens=4000,
         task_id=task.id,
+        tools=codebase_tools,
+        tool_executor=codebase_executor,
     )
 
     verdict = _parse_json_safely(raw)

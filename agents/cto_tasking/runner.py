@@ -8,6 +8,8 @@ from uuid import UUID
 import asyncpg
 from loguru import logger
 
+from pathlib import Path
+
 from agents.base import load_context_files, load_prompt
 from core.bots import BotRegistry
 from core.config import get_settings
@@ -16,6 +18,9 @@ from core.orchestrator import dispatch, register_agent
 from core.state_machine import transition
 from integrations.anthropic_client import call_llm
 from integrations.github import create_issue
+from services.codebase import (
+    codebase_tool_executor, get_codebase_tools_spec, refresh_snapshot,
+)
 from services.features import get_feature, update_context
 from services.skills import load_skills_for
 from services.tasks import create_task
@@ -42,6 +47,18 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
         chat_id=chat, message_thread_id=thread,
         text="📋 Раскладываю на задачи…",
     )
+
+    # ─── Codebase snapshot ───
+    snapshot_dir = Path(settings.codebase_snapshot_dir)
+    codebase_tools = None
+    executor = None
+    if snapshot_dir.exists():
+        try:
+            await refresh_snapshot()
+        except Exception as e:
+            logger.warning("Codebase snapshot refresh failed (continuing without): {}", e)
+        codebase_tools = get_codebase_tools_spec()
+        executor = codebase_tool_executor
 
     base_prompt = load_prompt("cto_tasking") + "\n\n# Project context\n" + load_context_files(
         "PROJECT.md", "tech/BACKEND_STACK.md", "tech/PWA_STACK.md", "tech/MOBILE_STACK.md",
@@ -85,6 +102,8 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
             system=system,
             messages=[{"role": "user", "content": user_text}],
             max_tokens=8000,
+            tools=codebase_tools,
+            tool_executor=executor,
         )
     except Exception as e:
         await bots.cto.send_message(
