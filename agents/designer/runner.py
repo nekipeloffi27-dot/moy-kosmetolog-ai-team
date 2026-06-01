@@ -117,6 +117,7 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
             max_tokens=12_000,
             tools=codebase_tools,
             tool_executor=executor,
+            max_tool_iterations=settings.designer_max_tool_iterations,
         )
     except Exception as e:
         await bots.designer.send_message(

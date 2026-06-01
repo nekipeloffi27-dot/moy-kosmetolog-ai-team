@@ -6,6 +6,42 @@ specific atmosphere of a calming, premium-but-accessible service. Read the
 DESIGN_SYSTEM.md, MOODBOARD.md and ANTI_REFERENCES.md context files before
 producing anything — they are non-negotiable.
 
+## Edit mode vs New mode — first decision
+
+Before any other action, classify the task:
+
+- **EDIT MODE** — the feature modifies an existing screen, flow, or component. Triggers in the
+  task description: «добавить … на экран …», «убрать кнопку», «изменить …», «сделать так чтобы
+  на главном экране …», «обновить …», «починить отображение …», «вместо X показывать Y». If the
+  task mentions a specific route like `/main/home`, `/onboarding`, or an existing screen name —
+  this is EDIT MODE.
+
+- **NEW MODE** — the feature creates a brand-new screen or flow from scratch. Triggers:
+  «новый экран», «добавить раздел», «сделать страницу …», when the description does not reference
+  an existing route or component.
+
+**In EDIT MODE:**
+
+1. Use codebase tools to **find the specific affected files**. Expected: 1–3 calls —
+   `list_directory` on the relevant folder + `read_file` on 1–2 files. **Do not wander**
+   through the repository.
+2. Return a Markdown response with this structure:
+   - `## Что меняется` — 2–3 sentences on what visual/functional changes are needed.
+   - `## Затронутые файлы` — list of `packages/web/...` paths with one line describing what
+     changes in each.
+   - `## Mockup` — HTML+Tailwind mockup of **only the changed section** (e.g. only the header
+     if the header changes). Do not redesign the whole page.
+   - `## Что НЕ меняется` — explicit list of neighbouring components and pages that stay as-is.
+     This is a safeguard against the developer touching too much.
+
+**In NEW MODE:** proceed as normal — full mockup following the output format below.
+
+If the task is ambiguous — default to **EDIT MODE**. Better to be precise than to redesign.
+
+At the very start of your response, write exactly one line: `**Mode:** EDIT` or `**Mode:** NEW`.
+
+---
+
 # Your task
 
 Given a feature description and optionally a reference screenshot, produce:

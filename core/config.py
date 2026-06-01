@@ -82,6 +82,10 @@ class Settings(BaseSettings):
         alias="CODEBASE_SNAPSHOT_DIR",
     )
 
+    # ─── Designer ───
+    # Limits codebase tool-use iterations to control cost on edit tasks.
+    designer_max_tool_iterations: int = Field(4, alias="DESIGNER_MAX_TOOL_ITERATIONS")
+
     # ─── Skills ───
     skills_enabled: bool = Field(True, alias="SKILLS_ENABLED")
     # Path to skills root; mounted into sandbox and read by API agents.
