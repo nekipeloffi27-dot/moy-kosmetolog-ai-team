@@ -154,7 +154,13 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
             "frontend_web": "💻 PWA",
             "frontend_mobile": "📱 Mobile",
         }.get(t["type"], t["type"])
-        summary_lines.append(f"{i}. {type_label} — <b>{t['title']}</b>")
+        complexity = _validated_complexity(t)
+        complexity_icon = {"simple": "🟢", "medium": "🟡", "complex": "🔴"}.get(complexity, "⚪")
+        file_count = len(t.get("affected_files") or [])
+        file_hint = f" ({file_count} {'файл' if file_count == 1 else 'файла' if 2 <= file_count <= 4 else 'файлов'})" if file_count else ""
+        summary_lines.append(
+            f"{i}. {complexity_icon} {complexity} · {type_label} — <b>{t['title']}</b>{file_hint}"
+        )
     await bots.cto.send_message(
         chat_id=chat, message_thread_id=thread,
         text="\n".join(summary_lines), parse_mode="HTML",
@@ -186,6 +192,15 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
         except Exception as e:
             logger.exception("Failed to create issue for '{}': {}", t["title"], e)
 
+        complexity = _validated_complexity(t)
+        affected = t.get("affected_files") or []
+        if not affected:
+            logger.warning(
+                "Task '{}' has no affected_files — plan is incomplete, forcing complexity=complex",
+                t["title"],
+            )
+            complexity = "complex"
+
         await create_task(
             pool,
             feature_id=feature_id,
@@ -193,6 +208,13 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
             title=t["title"],
             description=t["description"],
             github_issue_number=issue_data["number"] if issue_data else None,
+            complexity=complexity,
+            affected_files=affected,
+            changes_per_file=t.get("changes_per_file") or [],
+            do_not_touch=t.get("do_not_touch") or [],
+            references=t.get("references") or [],
+            verification=t.get("verification"),
+            expected_diff_size=t.get("expected_diff_size"),
         )
 
         if issue_data:
@@ -211,6 +233,17 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
                      reason=f"{len(tasks_spec)} tasks created")
 
     await dispatch(feature_id, FeatureState.CODING, bots, pool)
+
+
+def _validated_complexity(task_spec: dict) -> str:
+    value = task_spec.get("complexity", "medium")
+    if value not in {"simple", "medium", "complex"}:
+        logger.warning(
+            "Invalid complexity '{}' for task '{}' — defaulting to medium",
+            value, task_spec.get("title", "?"),
+        )
+        return "medium"
+    return value
 
 
 def _parse_json_safely(raw: str) -> dict | None:

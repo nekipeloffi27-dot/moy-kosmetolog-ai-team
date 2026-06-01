@@ -1,6 +1,7 @@
 """Task CRUD."""
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
 import asyncpg
@@ -17,15 +18,33 @@ async def create_task(
     title: str,
     description: str,
     github_issue_number: int | None = None,
+    complexity: str = "medium",
+    affected_files: list[str] | None = None,
+    changes_per_file: list[dict] | None = None,
+    do_not_touch: list[str] | None = None,
+    references: list[dict] | None = None,
+    verification: str | None = None,
+    expected_diff_size: str | None = None,
 ) -> Task:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO tasks (feature_id, type, title, description, github_issue_number)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO tasks (
+                feature_id, type, title, description, github_issue_number,
+                complexity, affected_files, changes_per_file,
+                do_not_touch, references, verification, expected_diff_size
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING *
             """,
             feature_id, type_.value, title, description, github_issue_number,
+            complexity,
+            json.dumps(affected_files or []),
+            json.dumps(changes_per_file or []),
+            json.dumps(do_not_touch or []),
+            json.dumps(references or []),
+            verification,
+            expected_diff_size,
         )
     return Task(**dict(row))
 

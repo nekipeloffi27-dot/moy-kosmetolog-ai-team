@@ -42,6 +42,13 @@ class Task(BaseModel):
     github_pr_number: int | None = None
     branch_name: str | None = None
     status: TaskStatus
+    complexity: str = "medium"
+    affected_files: list[str] = []
+    changes_per_file: list[dict] = []
+    do_not_touch: list[str] = []
+    references: list[dict] = []
+    verification: str | None = None
+    expected_diff_size: str | None = None
     created_at: datetime
     updated_at: datetime
 
