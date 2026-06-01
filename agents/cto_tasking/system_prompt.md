@@ -69,7 +69,25 @@ If codebase tools are available, you MUST investigate the existing code before
 writing a single task. Skipping this step leads to tasks that duplicate existing
 work or break adjacent code.
 
-**Minimum investigation checklist:**
+## Codebase reading budget
+
+You have a strict limit: maximum **5 read_file calls** and maximum **3 list_directory calls**
+in total. After that, stop reading and produce the final task plan.
+
+If you can't find a specific file in 5 reads — make the closest reasonable guess based on
+what you've seen, mark the task as `complexity=complex` (so a human can review), and proceed.
+
+DO NOT:
+- Read the same file twice — if you need to recheck, remember from earlier in this session
+- Read documentation files like README.md unless explicitly needed
+- Explore folders beyond the immediate scope of the feature
+
+DO:
+- Use search_codebase for targeted lookups before falling back to read_file
+- After 3 reads, start drafting the plan in your head — use remaining reads only for
+  filling concrete gaps
+
+**Minimum investigation checklist (pick the most relevant, stay within budget):**
 1. `list_directory("packages/api-python")` — understand the backend structure
 2. `search_codebase("@router|APIRouter", "**/*.py")` — find existing routes to avoid conflicts
 3. `list_directory("packages/web/app")` — see what Next.js pages/routes already exist

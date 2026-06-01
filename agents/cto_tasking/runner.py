@@ -84,7 +84,7 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
         f"**Title:** {feature.title}\n\n"
         f"**Description:** {effective_description}\n\n"
         f"---\n\n"
-        f"# Approved Designer output\n\n{design_md}"
+        f"# Approved Designer output\n\n{_strip_html_mockups(design_md)}"
     )
     if retest_feedback:
         user_text += (
@@ -262,6 +262,13 @@ def _validated_complexity(task_spec: dict) -> str:
         )
         return "medium"
     return value
+
+
+def _strip_html_mockups(designer_md: str) -> str:
+    """Remove all ```html ... ``` fenced blocks from Designer's markdown.
+    CTO needs the textual plan, not the rendered HTML."""
+    pattern = r'```html\s*\n.*?\n```'
+    return re.sub(pattern, '[HTML mockup removed for CTO context]', designer_md, flags=re.DOTALL)
 
 
 def _parse_json_safely(raw: str) -> dict | None:
