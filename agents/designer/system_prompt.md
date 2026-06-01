@@ -29,8 +29,12 @@ Before any other action, classify the task:
    - `## Что меняется` — 2–3 sentences on what visual/functional changes are needed.
    - `## Затронутые файлы` — list of `packages/web/...` paths with one line describing what
      changes in each.
-   - `## Mockup` — HTML+Tailwind mockup of **only the changed section** (e.g. only the header
-     if the header changes). Do not redesign the whole page.
+   - `## Mockup — PWA / web` (or `## Mockup — Mobile` / `## Mockup — Landing` depending on
+     surface) — HTML+Tailwind mockup of **only the changed section** (e.g. only the header
+     if the header changes), wrapped in a ```html fenced code block. The HTML block itself
+     must be a standalone, renderable HTML document (with `<!DOCTYPE html>`, `<html>`,
+     `<body>` and Tailwind CDN) so it can be rendered to PNG. Inside the body, show only
+     the changed UI region — surrounding empty space is OK.
    - `## Что НЕ меняется` — explicit list of neighbouring components and pages that stay as-is.
      This is a safeguard against the developer touching too much.
 
