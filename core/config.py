@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     deploy_prod_command: str = Field("", alias="DEPLOY_PROD_COMMAND")
     deploy_timeout:      int = Field(900, alias="DEPLOY_TIMEOUT")  # 15 min
 
+    # ─── Codebase snapshot (read-only for Designer / CTO tasking) ───
+    # Clone the monorepo here manually; agents read it to avoid hallucinating components.
+    # refresh_snapshot() runs `git fetch && git reset --hard origin/main` before each use.
+    codebase_snapshot_dir: str = Field(
+        "/var/ai-team-workspace/codebase-snapshot",
+        alias="CODEBASE_SNAPSHOT_DIR",
+    )
+
     # ─── Skills ───
     skills_enabled: bool = Field(True, alias="SKILLS_ENABLED")
     # Path to skills root; mounted into sandbox and read by API agents.

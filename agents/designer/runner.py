@@ -22,6 +22,9 @@ from core.enums import FeatureState
 from core.orchestrator import register_agent
 from core.state_machine import transition
 from integrations.anthropic_client import call_llm, image_block_from_path
+from services.codebase import (
+    codebase_tool_executor, get_codebase_tools_spec, refresh_snapshot,
+)
 from services.features import get_feature, update_context
 from services.skills import load_skills_for
 
@@ -42,6 +45,18 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
         text="🎨 Думаю над дизайном…",
     )
 
+    # ─── Codebase snapshot: try to refresh, enable tools if available ───
+    snapshot_dir = Path(settings.codebase_snapshot_dir)
+    codebase_tools = None
+    executor = None
+    if snapshot_dir.exists():
+        try:
+            await refresh_snapshot()
+        except Exception as e:
+            logger.warning("Codebase snapshot refresh failed (continuing without): {}", e)
+        codebase_tools = get_codebase_tools_spec()
+        executor = codebase_tool_executor
+
     # ─── Build system prompt ───
     base_prompt = load_prompt("designer") + "\n\n# Project context\n" + load_context_files(
         "PROJECT.md", "DESIGN_SYSTEM.md", "MOODBOARD.md", "ANTI_REFERENCES.md",
@@ -57,7 +72,22 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
                 "Apply them when relevant to the task.\n\n"
                 + skills_md
             )
-    system = base_prompt + skills_block
+    codebase_section = ""
+    if codebase_tools:
+        codebase_section = (
+            "\n\n## Codebase access\n\n"
+            "У тебя есть инструменты для чтения текущего репозитория moy-kosmetolog:\n"
+            "- `list_directory(path)` — посмотреть содержимое папки\n"
+            "- `read_file(path)` — прочитать файл\n"
+            "- `search_codebase(pattern, glob)` — поиск по коду\n\n"
+            "Используй их ПЕРЕД генерацией мокапа:\n"
+            "1. Посмотри `packages/web/components` — какие UI-компоненты (halo-ds) уже есть\n"
+            "2. Посмотри `packages/web/app` — какие страницы и роуты существуют\n"
+            "3. Посмотри `packages/mobile/screens` — какие экраны есть в мобилке\n\n"
+            "Мокап должен опираться на существующие компоненты — не выдумывай новые "
+            "имена без необходимости. Если нужного компонента нет — опиши это явно."
+        )
+    system = base_prompt + skills_block + codebase_section
 
     # ─── User message ───
     feedback = feature.context.get("design_feedback")
@@ -85,6 +115,8 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
             system=system,
             messages=[{"role": "user", "content": user_content}],
             max_tokens=12_000,
+            tools=codebase_tools,
+            tool_executor=executor,
         )
     except Exception as e:
         await bots.designer.send_message(
