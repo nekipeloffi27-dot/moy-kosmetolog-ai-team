@@ -10,6 +10,7 @@ from core.db import get_pool
 from core.enums import FeatureState
 from core.orchestrator import dispatch
 from core.state_machine import IllegalTransition, transition
+from services.budget_report import format_feature_report, get_feature_report
 from services.features import get_feature, get_feature_by_thread, update_context
 
 
@@ -45,6 +46,16 @@ async def cmd_approve_design(message: Message, bots: BotRegistry) -> None:
                 ),
                 parse_mode="HTML",
             )
+            try:
+                report = await get_feature_report(pool, feature.id)
+                await bots.pm.send_message(
+                    chat_id=feature.telegram_chat_id,
+                    message_thread_id=feature.telegram_thread_id,
+                    text=format_feature_report(report),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
         except IllegalTransition as e:
             await message.answer(f"Не вышло: {e}")
     else:

@@ -16,6 +16,7 @@ from core.db import get_pool
 from core.enums import FEATURE_STATE_LABELS_RU, FeatureState
 from core.orchestrator import dispatch
 from core.state_machine import IllegalTransition, transition
+from services.budget_report import format_feature_report, get_feature_report
 from services.features import (
     create_feature, get_feature_by_thread, list_active_features, update_context,
 )
@@ -234,14 +235,34 @@ async def cmd_status(message: Message) -> None:
 
     label = FEATURE_STATE_LABELS_RU[feature.state]
     badge = _feature_badge(feature.context)
-    await message.answer(
-        f"<b>{feature.title}</b>{badge}\n"
-        f"Статус: {label}\n"
-        f"Использовано: ${feature.budget_used_cents / 100:.2f} "
-        f"из ${feature.budget_cap_cents / 100:.2f}\n"
+
+    used  = feature.budget_used_cents
+    cap   = feature.budget_cap_cents
+    pct   = f"{used / cap * 100:.0f}%" if cap else "—"
+
+    lines = [
+        f"<b>{feature.title}</b>{badge}",
+        f"Статус: {label}",
+        f"Использовано: <b>${used / 100:.2f}</b> из ${cap / 100:.2f} ({pct})",
         f"ID: <code>{feature.id}</code>",
-        parse_mode="HTML",
-    )
+    ]
+
+    # Per-agent breakdown from agent_calls
+    try:
+        report = await get_feature_report(pool, feature.id)
+        if report["by_agent"]:
+            lines.append("")
+            lines.append("<b>💰 По агентам:</b>")
+            for a in report["by_agent"]:
+                from services.budget_report import _AGENT_NAMES
+                name = _AGENT_NAMES.get(a["agent"], a["agent"])
+                lines.append(
+                    f"• {name} — ${a['cost_cents'] / 100:.2f} ({a['calls']} вызовов)"
+                )
+    except Exception:
+        pass  # don't break /status if budget query fails
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("list"))
@@ -274,6 +295,11 @@ async def cmd_cancel(message: Message) -> None:
         await transition(pool, feature.id, FeatureState.FAILED,
                          actor="user", reason="manual cancel")
         await message.answer("Фича отменена.")
+        try:
+            report = await get_feature_report(pool, feature.id)
+            await message.answer(format_feature_report(report), parse_mode="HTML")
+        except Exception:
+            pass
     except IllegalTransition as e:
         await message.answer(f"Не могу отменить: {e}")
 

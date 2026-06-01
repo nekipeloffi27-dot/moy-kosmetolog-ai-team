@@ -14,7 +14,7 @@ from loguru import logger
 
 from core.budget import cost_cents
 from core.config import get_settings
-from services.features import add_budget_used, is_over_budget
+from services.features import add_budget_used, is_over_budget, mark_budget_alert_sent
 
 
 class BudgetExceeded(Exception):
@@ -66,7 +66,8 @@ async def log_call(
             feature_id, task_id, agent, model, input_tokens, output_tokens,
             cents, duration_ms, success, error,
         )
-    await add_budget_used(pool, feature_id, cents)
+    budget = await add_budget_used(pool, feature_id, cents)
+    await _maybe_fire_budget_alert(pool, feature_id, budget)
     return cents
 
 
@@ -299,3 +300,62 @@ async def _call_with_tools(
         current_messages.append({"role": "user", "content": tool_results})
 
     return "".join(all_text_parts)
+
+
+async def _maybe_fire_budget_alert(pool, feature_id: UUID, budget: dict) -> None:
+    """Post a Telegram alert if a budget threshold (50% or 90%) was just crossed."""
+    cap = budget.get("cap", 0)
+    if not cap:
+        return
+
+    used        = budget.get("used", 0)
+    alerts_sent = budget.get("alerts_sent", [])
+    ratio       = used / cap
+
+    alert_level: int | None = None
+    if ratio >= 0.9 and 90 not in alerts_sent:
+        alert_level = 90
+    elif ratio >= 0.5 and 50 not in alerts_sent:
+        alert_level = 50
+
+    if alert_level is None:
+        return
+
+    # Record first so re-entrant calls don't double-fire
+    try:
+        await mark_budget_alert_sent(pool, feature_id, alert_level)
+    except Exception as e:
+        logger.warning("Could not record budget alert for feature {}: {}", feature_id, e)
+        return
+
+    used_str = f"${used / 100:.2f}"
+    cap_str  = f"${cap / 100:.2f}"
+    icon     = "🚨" if alert_level == 90 else "⚠️"
+    text = (
+        f"{icon} Использовано {alert_level}% бюджета "
+        f"({used_str} из {cap_str}).\n"
+        f"Чтобы увеличить лимит — TODO: <code>/budget_cap &lt;cents&gt;</code>"
+    )
+
+    chat_id   = budget.get("chat_id", 0)
+    thread_id = budget.get("thread_id", 0)
+    if not chat_id:
+        return
+
+    try:
+        from core.bots import get_bots
+        bots = get_bots()
+        await bots.pm.send_message(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            text=text,
+            parse_mode="HTML",
+        )
+        logger.info(
+            "Budget alert {}% fired for feature {} (used={}, cap={})",
+            alert_level, feature_id, used, cap,
+        )
+    except RuntimeError:
+        pass  # bots not initialized (e.g. CLI / test context)
+    except Exception as e:
+        logger.warning("Failed to send budget alert for feature {}: {}", feature_id, e)

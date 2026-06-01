@@ -136,18 +136,51 @@ async def append_to_context_list(
         )
 
 
-async def add_budget_used(pool: asyncpg.Pool, feature_id: UUID, cents: int) -> int:
-    """Add to budget_used_cents, return new total."""
+async def add_budget_used(pool: asyncpg.Pool, feature_id: UUID, cents: int) -> dict:
+    """Add to budget_used_cents. Returns {used, cap, alerts_sent, chat_id, thread_id}."""
     async with pool.acquire() as conn:
-        return await conn.fetchval(
+        row = await conn.fetchrow(
             """
             UPDATE features
             SET budget_used_cents = budget_used_cents + $1,
                 updated_at = NOW()
             WHERE id = $2
-            RETURNING budget_used_cents
+            RETURNING budget_used_cents, budget_cap_cents, context,
+                      telegram_chat_id, telegram_thread_id
             """,
             cents, feature_id,
+        )
+    if row is None:
+        return {"used": 0, "cap": 0, "alerts_sent": [], "chat_id": 0, "thread_id": 0}
+    d = dict(row)
+    ctx = d["context"]
+    if isinstance(ctx, str):
+        ctx = json.loads(ctx)
+    return {
+        "used":      d["budget_used_cents"],
+        "cap":       d["budget_cap_cents"],
+        "alerts_sent": ctx.get("budget_alerts_sent", []),
+        "chat_id":   d["telegram_chat_id"],
+        "thread_id": d["telegram_thread_id"],
+    }
+
+
+async def mark_budget_alert_sent(pool: asyncpg.Pool, feature_id: UUID, level: int) -> None:
+    """Atomically append alert level to context.budget_alerts_sent."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE features
+            SET context = jsonb_set(
+                context,
+                '{budget_alerts_sent}',
+                COALESCE(context->'budget_alerts_sent', '[]'::jsonb) || $1::jsonb,
+                true
+            ),
+            updated_at = NOW()
+            WHERE id = $2
+            """,
+            json.dumps([level]), feature_id,
         )
 
 

@@ -15,12 +15,12 @@ from aiogram import Dispatcher
 from aiogram.types import Message
 from loguru import logger
 
-from core.bots import BotRegistry, init_bots
+from core.bots import BotRegistry, init_bots, set_bots
 from core.config import get_settings
 from core.db import close_pool, get_pool, init_pool
 from core.orchestrator import resume_pending
 
-from bot.handlers import admin, clarification, feature, feedback, ops, revert
+from bot.handlers import admin, budget, clarification, feature, feedback, ops, revert
 
 # Importing agents triggers their @register_agent decorators
 import agents  # noqa: F401
@@ -72,6 +72,7 @@ async def main() -> None:
     pool = get_pool()
 
     bots: BotRegistry = await init_bots(settings)
+    set_bots(bots)
 
     dp = Dispatcher()
     # Make the BotRegistry available to every handler as a `bots` parameter
@@ -82,6 +83,7 @@ async def main() -> None:
     dp.include_router(admin.router)
     dp.include_router(feature.router)
     dp.include_router(feedback.router)
+    dp.include_router(budget.router)
     dp.include_router(clarification.router)
     dp.include_router(ops.router)
     dp.include_router(revert.router)

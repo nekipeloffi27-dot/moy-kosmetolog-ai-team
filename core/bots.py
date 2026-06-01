@@ -47,6 +47,20 @@ class BotRegistry:
                 logger.warning("Failed to close session for bot {}: {}", bot.id or "?", e)
 
 
+_bots: "BotRegistry | None" = None
+
+
+def set_bots(registry: "BotRegistry") -> None:
+    global _bots
+    _bots = registry
+
+
+def get_bots() -> "BotRegistry":
+    if _bots is None:
+        raise RuntimeError("BotRegistry not initialized — call set_bots() at startup")
+    return _bots
+
+
 async def init_bots(settings: Settings) -> BotRegistry:
     """Construct all 5 bots and verify each token is valid by calling getMe."""
     defaults = DefaultBotProperties(parse_mode=None)

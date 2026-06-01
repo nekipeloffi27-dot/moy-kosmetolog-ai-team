@@ -20,6 +20,7 @@ from core.enums import FeatureState
 from core.orchestrator import register_agent
 from core.state_machine import transition
 from integrations.deploy import run_deploy_command
+from services.budget_report import format_feature_report, get_feature_report
 from services.features import get_feature, update_context
 
 
@@ -115,6 +116,16 @@ async def _do_deploy(
         )
         await transition(pool, feature_id, on_success_state,
                          actor=success_actor, reason=f"{env_label} deploy succeeded")
+        if on_success_state == FeatureState.PROD_DEPLOYED:
+            try:
+                report = await get_feature_report(pool, feature_id)
+                await bots.cto.send_message(
+                    chat_id=chat, message_thread_id=thread,
+                    text=format_feature_report(report),
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                logger.warning("Failed to post budget summary for feature {}: {}", feature_id, e)
         return
 
     # Failed
