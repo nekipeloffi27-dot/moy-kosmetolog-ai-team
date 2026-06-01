@@ -203,8 +203,18 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
         "-e", f"IS_RERUN={'1' if is_rerun else '0'}",
         "-v", f"{prompts_dir}:/prompts:ro",
         "-v", f"{settings.sandbox_workspace}/work/{feature.id}/{task.type.value}:/workspace",
-        settings.dev_sandbox_image,
     ]
+
+    if settings.skills_enabled:
+        skills_root = Path(settings.skills_dir)
+        common_skills = skills_root / "common"
+        role_skills = skills_root / task.type.value
+        if common_skills.exists():
+            docker_cmd += ["-v", f"{common_skills}:/root/.claude/skills/common:ro"]
+        if role_skills.exists():
+            docker_cmd += ["-v", f"{role_skills}:/root/.claude/skills/{task.type.value}:ro"]
+
+    docker_cmd.append(settings.dev_sandbox_image)
 
     logger.info("Spawning sandbox: {}", " ".join(shlex.quote(p) for p in docker_cmd))
 

@@ -23,6 +23,7 @@ from core.orchestrator import register_agent
 from core.state_machine import transition
 from integrations.anthropic_client import call_llm, image_block_from_path
 from services.features import get_feature, update_context
+from services.skills import load_skills_for
 
 
 @register_agent(FeatureState.DESIGN_PENDING)
@@ -42,10 +43,21 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
     )
 
     # ─── Build system prompt ───
-    system = load_prompt("designer") + "\n\n# Project context\n" + load_context_files(
+    base_prompt = load_prompt("designer") + "\n\n# Project context\n" + load_context_files(
         "PROJECT.md", "DESIGN_SYSTEM.md", "MOODBOARD.md", "ANTI_REFERENCES.md",
         "tech/PWA_STACK.md", "tech/MOBILE_STACK.md",
     )
+    skills_block = ""
+    if settings.skills_enabled:
+        skills_md = load_skills_for("designer")
+        if skills_md:
+            skills_block = (
+                "\n\n## Available skills\n\n"
+                "You have the following skills available. "
+                "Apply them when relevant to the task.\n\n"
+                + skills_md
+            )
+    system = base_prompt + skills_block
 
     # ─── User message ───
     feedback = feature.context.get("design_feedback")

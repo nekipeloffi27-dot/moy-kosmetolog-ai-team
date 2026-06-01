@@ -91,6 +91,9 @@ PROMPT_FILE=$(mktemp)
 } > "${PROMPT_FILE}"
 
 cd "${WORKDIR}"
+log "Skills available:"
+ls -la /root/.claude/skills/ 2>/dev/null || echo "  (none mounted)" >&2
+
 log "Running Claude Code (model=${MODEL}, rerun=${IS_RERUN:-0})…"
 
 PROXY_ENV=""

@@ -23,9 +23,6 @@ venv/
 *.swp
 *.swo
 
-# Skills (downloaded separately, not in repo)
-skills/
-
 # Runtime artifacts
 logs/
 *.log

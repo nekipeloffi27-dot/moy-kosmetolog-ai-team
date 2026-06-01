@@ -28,6 +28,7 @@ from core.state_machine import transition
 from integrations.anthropic_client import call_llm
 from integrations.github import list_pr_files, merge_pr, post_pr_comment
 from services.features import get_feature, update_context
+from services.skills import load_skills_for
 from services.tasks import all_tasks_in_status, list_tasks, update_task_status
 
 
@@ -75,7 +76,18 @@ async def run_cto_review(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool
     )
 
     api_contract = feature.context.get("api_contract", {})
-    review_prompt = load_prompt("cto_review")
+    base_review_prompt = load_prompt("cto_review")
+    skills_block = ""
+    if settings.skills_enabled:
+        skills_md = load_skills_for("cto_review")
+        if skills_md:
+            skills_block = (
+                "\n\n## Available skills\n\n"
+                "You have the following skills available. "
+                "Apply them when relevant to the task.\n\n"
+                + skills_md
+            )
+    review_prompt = base_review_prompt + skills_block
 
     any_changes_requested = False
 

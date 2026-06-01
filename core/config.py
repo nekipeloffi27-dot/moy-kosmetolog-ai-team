@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     deploy_prod_command: str = Field("", alias="DEPLOY_PROD_COMMAND")
     deploy_timeout:      int = Field(900, alias="DEPLOY_TIMEOUT")  # 15 min
 
+    # ─── Skills ───
+    skills_enabled: bool = Field(True, alias="SKILLS_ENABLED")
+    # Path to skills root; mounted into sandbox and read by API agents.
+    # In production: mount skills/ volume here. Locally: falls back to repo skills/.
+    skills_dir: str = Field("/opt/ai-team/skills", alias="SKILLS_DIR")
+
     # ─── Logging ───
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 

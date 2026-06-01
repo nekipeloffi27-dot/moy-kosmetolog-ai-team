@@ -17,6 +17,7 @@ from core.state_machine import transition
 from integrations.anthropic_client import call_llm
 from integrations.github import create_issue
 from services.features import get_feature, update_context
+from services.skills import load_skills_for
 from services.tasks import create_task
 
 
@@ -42,9 +43,20 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
         text="📋 Раскладываю на задачи…",
     )
 
-    system = load_prompt("cto_tasking") + "\n\n# Project context\n" + load_context_files(
+    base_prompt = load_prompt("cto_tasking") + "\n\n# Project context\n" + load_context_files(
         "PROJECT.md", "tech/BACKEND_STACK.md", "tech/PWA_STACK.md", "tech/MOBILE_STACK.md",
     )
+    skills_block = ""
+    if settings.skills_enabled:
+        skills_md = load_skills_for("cto_tasking")
+        if skills_md:
+            skills_block = (
+                "\n\n## Available skills\n\n"
+                "You have the following skills available. "
+                "Apply them when relevant to the task.\n\n"
+                + skills_md
+            )
+    system = base_prompt + skills_block
 
     design_md = feature.context.get("design_markdown", "(дизайн отсутствует)")
     retest_feedback = feature.context.get("last_test_feedback")
