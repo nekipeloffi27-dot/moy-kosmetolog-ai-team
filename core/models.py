@@ -22,6 +22,7 @@ class Feature(BaseModel):
     telegram_user_id: int
     state: FeatureState
     context: dict[str, Any] = {}
+    clarification_history: list[dict[str, Any]] = []
     budget_used_cents: int = 0
     budget_cap_cents: int = 500
     created_at: datetime

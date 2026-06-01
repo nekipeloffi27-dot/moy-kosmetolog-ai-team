@@ -66,7 +66,8 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
     if feature.screenshot_path and Path(feature.screenshot_path).exists():
         user_content.append(image_block_from_path(feature.screenshot_path))
 
-    text = f"Фича: **{feature.title}**\n\n{feature.description}"
+    effective_description = feature.context.get("clarified_description") or feature.description
+    text = f"Фича: **{feature.title}**\n\n{effective_description}"
     if feedback:
         text += (
             f"\n\n---\n\n**Замечания по предыдущей версии (от пользователя):**\n"

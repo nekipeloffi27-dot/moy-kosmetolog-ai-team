@@ -60,11 +60,12 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
 
     design_md = feature.context.get("design_markdown", "(дизайн отсутствует)")
     retest_feedback = feature.context.get("last_test_feedback")
+    effective_description = feature.context.get("clarified_description") or feature.description
 
     user_text = (
         f"# Original request\n\n"
         f"**Title:** {feature.title}\n\n"
-        f"**Description:** {feature.description}\n\n"
+        f"**Description:** {effective_description}\n\n"
         f"---\n\n"
         f"# Approved Designer output\n\n{design_md}"
     )

@@ -14,6 +14,12 @@ from core.enums import FeatureState
 
 
 ALLOWED: dict[FeatureState, set[FeatureState]] = {
+    FeatureState.CLARIFICATION: {
+        FeatureState.DESIGN_PENDING,   # /confirmed — standard flow
+        FeatureState.TASKS_PENDING,    # /confirmed with skip_design=True
+        FeatureState.BLOCKED,
+        FeatureState.FAILED,           # /cancel
+    },
     FeatureState.DESIGN_PENDING: {
         FeatureState.DESIGN_REVIEW,
         FeatureState.BLOCKED,
@@ -104,7 +110,7 @@ async def transition(
                 UPDATE features
                 SET state = $1,
                     updated_at = NOW(),
-                    completed_at = CASE WHEN $1::feature_state IN ('prod_deployed','failed')
+                    completed_at = CASE WHEN $1::feature_state IN ('prod_deployed','failed','cancelled')
                                         THEN NOW() ELSE completed_at END
                 WHERE id = $2
                 """,

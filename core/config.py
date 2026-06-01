@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # ─── Anthropic ───
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     anthropic_proxy_url: str = Field("", alias="ANTHROPIC_PROXY_URL")
+    model_pm: str = Field("claude-opus-4-7", alias="MODEL_PM")
     model_designer: str = Field("claude-opus-4-7", alias="MODEL_DESIGNER")
     model_cto: str = Field("claude-opus-4-7", alias="MODEL_CTO")
     model_cto_review: str = Field("claude-opus-4-7", alias="MODEL_CTO_REVIEW")

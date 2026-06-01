@@ -21,6 +21,7 @@ async def create_feature(
     telegram_user_id: int,
     screenshot_path: str | None = None,
     budget_cap_cents: int = 500,
+    state: FeatureState = FeatureState.CLARIFICATION,
 ) -> Feature:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -28,14 +29,14 @@ async def create_feature(
             INSERT INTO features (
                 title, description, screenshot_path,
                 telegram_chat_id, telegram_thread_id, telegram_user_id,
-                budget_cap_cents
+                budget_cap_cents, state
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             """,
             title, description, screenshot_path,
             telegram_chat_id, telegram_thread_id, telegram_user_id,
-            budget_cap_cents,
+            budget_cap_cents, state.value,
         )
     return _row_to_feature(row)
 
@@ -95,6 +96,23 @@ async def update_context(
         )
 
 
+async def append_clarification_history(
+    pool: asyncpg.Pool, feature_id: UUID, entry: dict
+) -> None:
+    """Append one entry to clarification_history array."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE features
+            SET clarification_history = clarification_history || $1::jsonb,
+                updated_at = NOW()
+            WHERE id = $2
+            """,
+            json.dumps([entry]),
+            feature_id,
+        )
+
+
 async def add_budget_used(pool: asyncpg.Pool, feature_id: UUID, cents: int) -> int:
     """Add to budget_used_cents, return new total."""
     async with pool.acquire() as conn:
@@ -120,7 +138,7 @@ async def is_over_budget(pool: asyncpg.Pool, feature_id: UUID) -> bool:
 
 def _row_to_feature(row) -> Feature:
     d = dict(row)
-    # asyncpg returns jsonb as string — parse it
-    if isinstance(d.get("context"), str):
-        d["context"] = json.loads(d["context"])
+    for jsonb_field in ("context", "clarification_history"):
+        if isinstance(d.get(jsonb_field), str):
+            d[jsonb_field] = json.loads(d[jsonb_field])
     return Feature(**d)

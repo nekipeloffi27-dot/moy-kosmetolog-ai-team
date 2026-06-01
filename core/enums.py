@@ -3,6 +3,7 @@ from enum import StrEnum
 
 
 class FeatureState(StrEnum):
+    CLARIFICATION = "clarification"
     DESIGN_PENDING = "design_pending"
     DESIGN_REVIEW = "design_review"
     TASKS_PENDING = "tasks_pending"
@@ -32,6 +33,7 @@ class TaskStatus(StrEnum):
 
 # Human-readable labels for Telegram messages
 FEATURE_STATE_LABELS_RU: dict[FeatureState, str] = {
+    FeatureState.CLARIFICATION:   "💬 PM уточняет задачу",
     FeatureState.DESIGN_PENDING:  "🎨 Дизайнер думает",
     FeatureState.DESIGN_REVIEW:   "👀 Жду твой ОК по дизайну",
     FeatureState.TASKS_PENDING:   "📋 CTO режет на задачи",

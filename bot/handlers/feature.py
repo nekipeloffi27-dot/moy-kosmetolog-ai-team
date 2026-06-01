@@ -15,8 +15,9 @@ from core.config import get_settings
 from core.db import get_pool
 from core.enums import FEATURE_STATE_LABELS_RU, FeatureState
 from core.orchestrator import dispatch
+from core.state_machine import IllegalTransition, transition
 from services.features import (
-    create_feature, get_feature_by_thread, list_active_features,
+    create_feature, get_feature_by_thread, list_active_features, update_context,
 )
 from services.threads import create_feature_topic, post_to_thread
 
@@ -98,7 +99,7 @@ async def cmd_feature(message: Message, command: CommandObject, bots: BotRegistr
     intro = (
         f"🎬 <b>{title}</b>\n\n"
         f"<i>{description}</i>\n\n"
-        f"Состояние: {FEATURE_STATE_LABELS_RU[FeatureState.DESIGN_PENDING]}\n"
+        f"Состояние: {FEATURE_STATE_LABELS_RU[FeatureState.CLARIFICATION]}\n"
         f"Бюджет: ${feature.budget_cap_cents / 100:.2f}"
     )
     await post_to_thread(
@@ -108,7 +109,41 @@ async def cmd_feature(message: Message, command: CommandObject, bots: BotRegistr
         text=intro,
     )
 
-    await dispatch(feature.id, FeatureState.DESIGN_PENDING, bots, pool)
+    await dispatch(feature.id, FeatureState.CLARIFICATION, bots, pool)
+
+
+@router.message(Command("confirmed"))
+async def cmd_confirmed(message: Message, bots: BotRegistry) -> None:
+    """Confirm clarification and advance to design or tasking."""
+    pool = get_pool()
+    feature = await get_feature_by_thread(pool, message.chat.id, message.message_thread_id or 0)
+    if feature is None:
+        await message.answer("В этом треде нет привязанной фичи.")
+        return
+    if feature.state != FeatureState.CLARIFICATION:
+        await message.answer("Команда работает только на этапе уточнения (clarification).")
+        return
+
+    # Promote the last PM understanding to clarified_description
+    understanding = feature.context.get("pm_understanding", "")
+    if understanding:
+        await update_context(pool, feature.id, clarified_description=understanding)
+
+    skip_design = feature.context.get("skip_design", False)
+    next_state = FeatureState.TASKS_PENDING if skip_design else FeatureState.DESIGN_PENDING
+
+    try:
+        await transition(pool, feature.id, next_state, actor="user", reason="/confirmed")
+    except IllegalTransition as e:
+        await message.answer(f"Не могу подтвердить: {e}")
+        return
+
+    if skip_design:
+        await message.answer("Принято. CTO режет на задачи.")
+        await dispatch(feature.id, FeatureState.TASKS_PENDING, bots, pool)
+    else:
+        await message.answer("Принято. Передаю Дизайнеру.")
+        await dispatch(feature.id, FeatureState.DESIGN_PENDING, bots, pool)
 
 
 @router.message(Command("status"))
@@ -156,8 +191,6 @@ async def cmd_list(message: Message) -> None:
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message) -> None:
-    from core.state_machine import transition, IllegalTransition
-
     pool = get_pool()
     feature = await get_feature_by_thread(pool, message.chat.id, message.message_thread_id or 0)
     if feature is None:

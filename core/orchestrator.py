@@ -56,6 +56,7 @@ async def dispatch(feature_id: UUID, state: FeatureState, bots: BotRegistry, poo
 async def resume_pending(bots: BotRegistry, pool: asyncpg.Pool) -> None:
     """On bot startup, resume any features that were mid-agent when we last shut down."""
     states_needing_agent = [
+        FeatureState.CLARIFICATION,
         FeatureState.DESIGN_PENDING,
         FeatureState.TASKS_PENDING,
         FeatureState.CODING,
