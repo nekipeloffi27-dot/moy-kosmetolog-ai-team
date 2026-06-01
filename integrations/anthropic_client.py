@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 import asyncpg
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, APITimeoutError
 from loguru import logger
 
 from core.budget import cost_cents
@@ -33,7 +33,7 @@ def get_client() -> AsyncAnthropic:
             import httpx
             kwargs["http_client"] = httpx.AsyncClient(
                 proxy=settings.anthropic_proxy_url,
-                timeout=httpx.Timeout(120.0, connect=10.0),
+                timeout=httpx.Timeout(900.0, connect=15.0),
             )
             logger.info("Anthropic SDK: using HTTPS proxy")
         _client = AsyncAnthropic(**kwargs)
@@ -146,12 +146,27 @@ async def _call_once(
     text_out = ""
 
     try:
-        resp = await client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=messages,
-        )
+        last_exc = None
+        for attempt, backoff in enumerate([0, 5, 15], start=1):
+            if backoff:
+                logger.warning("Retry attempt {} for agent {} after {}s backoff", attempt, agent, backoff)
+                import asyncio as _asyncio
+                await _asyncio.sleep(backoff)
+            try:
+                resp = await client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=messages,
+                )
+                last_exc = None
+                break
+            except APITimeoutError as e:
+                last_exc = e
+                logger.warning("APITimeoutError on attempt {} for agent {}: {}", attempt, agent, e)
+                continue
+        if last_exc is not None:
+            raise last_exc
         in_tok = resp.usage.input_tokens
         out_tok = resp.usage.output_tokens
         text_out = "".join(
