@@ -1,83 +1,85 @@
 # Backend stack — moy-kosmetolog/packages/api-python
 
-## Stack (actual, not aspirational)
+## Stack (actual)
 
-- Python 3.12
-- FastAPI (async)
-- **SQLAlchemy 2.0 async** with the typed ORM (NOT raw asyncpg —
-  the existing codebase uses ORM, follow it)
-- PostgreSQL 16
-- Redis 7
-- Alembic migrations
-- Uvicorn server
-- pytest + pytest-asyncio
-- pydantic v2 for schemas
-- boto3 for Yandex Cloud S3
-- ruff for linting
+- **Python 3.12**
+- **FastAPI 0.115.x** — async
+- **SQLAlchemy 2.0 async** с typed ORM (`Mapped`, `mapped_column`) — NOT raw asyncpg
+- **asyncpg 0.30.x** — async Postgres driver (под SQLAlchemy)
+- **PostgreSQL 16** (uuid-ossp + pgcrypto extensions)
+- **Redis 7** — OTP rate-limiting, session data
+- **Alembic 1.14.x** — миграции
+- **Pydantic v2.10.x** — schemas и settings
+- **pydantic-settings** — конфиг через `.env`
+- **python-jose[cryptography]** — JWT (HS256)
+- **Uvicorn** — ASGI server (port 3000)
+- **httpx** — HTTP клиент для внешних API (OAuth, SMS, Anthropic)
+- **boto3** — Yandex Cloud S3 (S3-совместимый)
+- **Pillow** — image processing
+- **redis[hiredis]** — Redis клиент
+- **ruff 0.8.x** — linting + formatting
+- **pytest + pytest-asyncio** — тесты
 
-AI clients:
-- `openai` for GPT-4o Vision (skin scan)
-- `anthropic` for Claude (chat, recommendations)
+**AI**: только **Anthropic Claude** (`anthropic==0.42.*`, модель `claude-sonnet-4-5`) — и для scan (vision), и для chat/recommendations.  
+`openai` есть в `requirements.txt` но **не используется**. Не подключать, не добавлять.
 
-## Repo layout (inside packages/api-python/)
+## Структура (packages/api-python/)
 
 ```
-packages/api-python/
-├── app/
-│   ├── main.py                  # FastAPI app + router assembly
-│   ├── server.py                # Uvicorn entrypoint
-│   ├── seed.py / seed_articles.py
-│   ├── core/
-│   │   ├── config.py            # Pydantic settings
-│   │   └── deps.py              # Auth deps (current_user, etc.)
-│   ├── db/
-│   │   ├── session.py           # Async SQLAlchemy engine + session
-│   │   └── models.py            # 17 ORM models — single file
-│   ├── modules/                 # one folder per feature
-│   │   ├── auth/                # OTP, JWT, OAuth (Telegram/Yandex/Apple/Google/VK)
-│   │   ├── user/
-│   │   ├── scan/                # AI Vision skin scan
-│   │   ├── recommendations/
-│   │   ├── diary/
-│   │   ├── feed/
-│   │   ├── chat/                # Claude chat
-│   │   ├── cosmetic_analysis/
-│   │   ├── routine/
-│   │   ├── home/                # home widgets
-│   │   ├── articles/
-│   │   ├── doctors/
-│   │   └── upload/              # S3 file uploads
-│   └── services/
-│       ├── redis_client.py
-│       ├── storage.py           # S3 / Yandex Cloud
-│       └── weather.py
-├── migrations/                  # Alembic
-├── tests/                       # pytest
-├── requirements.txt
-├── pyproject.toml               # ruff config
-├── alembic.ini
-└── Dockerfile
+app/
+├── main.py                  — FastAPI app + сборка всех router-ов
+├── server.py                — Uvicorn entrypoint
+├── seed.py / seed_articles.py
+├── core/
+│   ├── config.py            — Pydantic Settings (env vars / .env)
+│   └── deps.py              — Auth зависимости: get_current_user_id, get_optional_user_id
+├── db/
+│   ├── session.py           — Async SQLAlchemy engine + AsyncSession factory
+│   └── models.py            — ВСЕ ORM-модели в одном файле (21 модель)
+├── modules/                 — по одной папке на feature
+│   ├── auth/                — OTP (SMS.ru), JWT, OAuth (Telegram/Yandex/Apple/Google/VK)
+│   ├── user/                — CRUD профиля
+│   ├── scan/                — AI Vision скан (Anthropic Claude + MediaPipe)
+│   ├── cosmetic_analysis/   — Анализ состава косметики
+│   ├── recommendations/     — Персональные рекомендации
+│   ├── routine/             — Рутина ухода (UserRoutine + RoutineCompletion)
+│   ├── home/                — Виджеты домашнего экрана
+│   ├── articles/            — Контентные статьи
+│   ├── diary/               — Дневник кожи
+│   ├── feed/                — Community feed
+│   ├── chat/                — AI чат с Claude
+│   ├── doctors/             — Каталог врачей
+│   └── upload/              — S3 file uploads
+└── services/
+    ├── redis_client.py
+    ├── storage.py           — S3 / Yandex Cloud
+    └── weather.py           — Погода для контекста рутины
+
+migrations/                  — Alembic versions
+tests/                       — pytest integration tests
+requirements.txt
+pyproject.toml               — ruff config
+alembic.ini
+Dockerfile
 ```
 
-## Module structure convention
+## Структура модуля
 
-Every feature module under `modules/<name>/` follows roughly:
+Каждый `modules/<name>/` содержит:
 
 ```
 modules/<name>/
 ├── __init__.py
-├── router.py        # FastAPI router with endpoints
-├── schemas.py       # Pydantic request/response models
-├── service.py       # business logic (pure-ish; uses session)
-└── (optional) ai.py # LLM-specific helpers
+├── router.py        — FastAPI router с эндпоинтами
+├── schemas.py       — Pydantic request/response модели
+└── service.py       — бизнес-логика (использует AsyncSession)
 ```
 
-When adding new feature: follow this structure. Don't introduce a new
-pattern.
+При добавлении нового feature — следовать этой структуре, не изобретать паттернов.
 
-## Conventions
+## Соглашения
 
-- **SQLAlchemy 2.0 async** with the `select()` + `session.execute()` style:
+### ORM (SQLAlchemy 2.0 async)
 
 ```python
 from sqlalchemy import select
@@ -88,123 +90,133 @@ async def get_user(session: AsyncSession, user_id: UUID) -> User | None:
     return result.scalar_one_or_none()
 ```
 
-  Use `session.flush()` + `session.refresh()` after creates if you need
-  generated PKs. Use explicit `await session.commit()` at the endpoint
-  boundary (not inside services).
+- `session.flush()` + `session.refresh()` после создания если нужен сгенерированный PK
+- `await session.commit()` — только на границе эндпоинта, не внутри сервисов
+- **Все модели в одном файле**: `app/db/models.py`. Не разносить по модулям.
 
-- **Models are in one file**: `app/db/models.py`. Add new models there
-  alongside the existing 17. Don't split per-module — that's not how the
-  codebase is organized today.
+### Pydantic v2
 
-- **Pydantic v2** with `model_config = ConfigDict(from_attributes=True)`
-  for ORM → schema mapping.
+```python
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    nickname: str
+```
 
-- **Migrations**: Alembic. Use `alembic revision -m "..." --autogenerate`
-  to generate from model diffs (the project DOES use autogenerate, unlike
-  some other patterns). Review the generated migration before committing.
+### ID и timestamps
 
-- **Money in kopecks** as integer everywhere. Never floats.
+- **UUID PK** везде через `uuid_pk()` helper (server_default = `uuid_generate_v4()`)
+- **Timestamps**: `DateTime(timezone=True)`, `server_default=func.now()`. Никогда `datetime.utcnow()`.
+- Все datetime в ответах API — UTC с timezone info
 
-- **Datetimes as `TIMESTAMPTZ` (UTC)**. Convert to local TZ at the API
-  edge if needed for display.
+### Soft-delete
 
-- **IDs**: UUID PKs.
+В текущих моделях **не реализован** (нет `deleted_at`). При необходимости — обсудить с CTO перед добавлением.
 
-- **Soft-delete**: `deleted_at TIMESTAMPTZ`. Queries default to
-  `WHERE deleted_at IS NULL`. Add this filter to every list query for
-  domain tables.
+### Деньги / стоимость
 
-- **Anonymous endpoints**: scan, cosmetic_analysis, and some chat endpoints
-  accept `anonymous_token` from the client when no JWT is present. The
-  pattern is in `app/modules/scan/router.py` — copy it for any new
-  anonymous-allowed endpoint.
+Денежных транзакций в приложении нет. `cost_usd` в `ChatMessage` и `AiUsageLog` — учёт расходов AI в USD через `Numeric(10, 6)`. Не «в копейках», не float.
+
+### Именование
+
+- snake_case для всего Python кода
+- Эндпоинты: `/{resource}` и `/{resource}/{id}` (REST-стиль)
+- Request/response schemas: `UserOut`, `ScanRequest`, `AuthResponse` (PascalCase)
 
 ## API conventions
 
-- All routes under `/api/v1/<module>/...` (Nginx strips `/api/` → port 3000,
-  the app sees `/v1/...`).
-- Response format: directly the Pydantic schema, not wrapped. Errors via
-  `HTTPException` with `status_code` + `detail`.
-- For paginated lists: `?limit=20&offset=0` with response
-  `{"items": [...], "total": N}`.
+- Все маршруты: `/api/v1/<module>/...` (через `APIRouter(prefix="/api/v1")` в `main.py`)
+- Response: прямо Pydantic schema, не wrapped. Ошибки через `HTTPException(status_code, detail=...)`
+- Paginated lists: `?limit=N&offset=N` → `{"items": [...], "total": N}`
+- Auth endpoint prefix: `/api/v1/auth/`
 
-## AI integration patterns
+## Auth
 
-### OpenAI GPT-4o Vision (scan)
+- **OTP**: SMS.ru API, 4 цифры, TTL 5 мин, 3 попытки, 60 сек cooldown
+- **JWT**: HS256, access 15 мин, refresh 30 дней, хэши в БД (`RefreshToken`)
+- **OAuth providers**: Apple, Google, VK, Telegram, Yandex (все через `/auth/oauth/{provider}`)
+- **Anonymous flow**: `anonymous_token` в теле запроса (scan без авторизации). Паттерн — в `modules/scan/router.py`
+- **Dependency**: `get_current_user_id` → обязательный JWT; `get_optional_user_id` → JWT опционально
 
-```python
-from openai import AsyncOpenAI
-client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-resp = await client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": image_url}},
-            {"type": "text", "text": "Analyze this skin photo."},
-        ]},
-    ],
-)
-```
-
-### Anthropic Claude (chat, recommendations)
+## AI integration — Anthropic Claude
 
 ```python
-from anthropic import AsyncAnthropic
-client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+import httpx
 
-resp = await client.messages.create(
-    model="claude-sonnet-4-5",   # CORRECT model id, do NOT use claude-sonnet-3-x
-    max_tokens=4000,
-    system=SYSTEM_PROMPT,
-    messages=[{"role": "user", "content": user_text}],
-)
-text = resp.content[0].text
+# Прямой HTTP вызов (proxy support) — паттерн из scan/router.py
+async with httpx.AsyncClient(transport=transport, timeout=60) as client:
+    resp = await client.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": settings.anthropic_api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={
+            "model": settings.anthropic_chat_model,   # "claude-sonnet-4-5"
+            "max_tokens": 4000,
+            "system": SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": [...]}],
+        },
+    )
 ```
 
-NEVER call OpenAI/Anthropic with hardcoded keys — always via
-`app.core.config.settings`.
+- Proxy: `settings.anthropic_proxy_url` (для обхода геоблокировки)
+- Scan: передаёт изображение через `source.type: "url"` в content block
+- Chat: стандартные text messages
+
+**Никогда** не вызывать AI API с хардкодными ключами — только через `app.core.config.settings`.
+
+## Миграции
+
+```bash
+# Создать миграцию
+alembic revision --autogenerate -m "add_feature_to_users"
+
+# Применить
+alembic upgrade head
+```
+
+### Правила
+
+1. Forward-only на практике. `downgrade()` писать для формальности, не полагаться на него.
+2. **Никогда** не дропать колонку в той же миграции где добавляется замена. Ship replacement → deploy → backfill → drop в отдельной миграции.
+3. Добавить NOT NULL на непустую таблицу: три шага (add NULL → backfill → set NOT NULL в трёх миграциях).
+4. Индексы на существующих таблицах: `CREATE INDEX CONCURRENTLY` (вручную в migration, не через autogenerate).
+5. Naming convention: автогенерит alembic, примеры существующих: `ad0b0cb32318_initial_schema.py`, `4c65b97a0a08_add_theme_to_users.py`
 
 ## Code style
 
-- `ruff` (config in `pyproject.toml`).
-- Type hints required on every function signature.
-- `from __future__ import annotations` at the top of new files for cleaner
-  forward refs.
-- Errors: domain raises typed exceptions; router translates to HTTPException.
-- Logging: use the standard logging setup that already exists. Structured
-  log keys: `user_id`, `scan_id`, `feature_id` when relevant. Never log
-  phone, email, photo URLs at INFO.
+- `ruff` (config в `pyproject.toml`)
+- `from __future__ import annotations` в начале каждого нового файла
+- Type hints обязательны на каждой функции
+- Логирование: `logging.getLogger(__name__)`. Никогда не логировать phone, email, photo URL на INFO-уровне
 
-## Testing
+## Тесты
 
-- Unit tests for service-layer logic (pure Python, fast).
-- Integration tests via `httpx.AsyncClient` against a test Postgres.
-- Required coverage for new endpoints: happy path + at least one error path
-  + (for anonymous-allowed endpoints) an anonymous-token path.
+```
+tests/
+├── conftest.py
+├── test_auth.py
+├── test_chat.py
+├── test_diary.py
+├── test_doctors.py
+├── test_feed.py
+├── test_health.py
+├── test_profile.py
+├── test_recommendations.py
+├── test_scan.py
+└── test_upload.py
+```
 
-## Migration rules
+- Integration tests через `httpx.AsyncClient` против реального Postgres
+- Required coverage: happy path + минимум один error path + для anonymous-allowed эндпоинтов — anonymous token path
+- CI поднимает Postgres 16 + Redis 7 как services (`.github/workflows/ci-cd.yml`)
 
-1. Migrations forward-only in practice. Always write `downgrade()` for
-   completeness, never rely on it.
-2. NEVER drop a column in the same migration that adds its replacement —
-   ship replacement, deploy, backfill, THEN drop later.
-3. Adding NOT NULL to non-empty table: add NULL → backfill → set NOT NULL,
-   in three migrations.
-4. Indexes on existing tables: `CREATE INDEX CONCURRENTLY`.
+## Работа в монорепе
 
-## Working in the monorepo
-
-- The Python project lives at `packages/api-python/`. The dev sandbox is
-  already set to work there via `GITHUB_REPO_BACKEND=moy-kosmetolog#packages/api-python`.
-- Don't pretend the rest of the monorepo doesn't exist, but don't touch it
-  from backend tasks. If a frontend change is needed for your feature, the
-  CTO already created a separate frontend task — that agent handles it.
-
-## Pre-existing repo
-
-Repo: monorepo `moy-kosmetolog`, work in `packages/api-python/`.
-Default branch: `main`.
-PR title format: `[<feature_id_short>] <task title>`.
-Branch naming: `feat/<feature_id_short>/<slug>`.
+- Python проект: `packages/api-python/`
+- Локально: `cd packages/api-python && uvicorn app.main:app --reload --port 3000`
+- Docker: `docker compose up -d api`
+- Репо: `moy-kosmetolog`, рабочая папка `packages/api-python/`
+- Ветки: `feat/<feature_id_short>/<slug>`, PR: `[<feature_id_short>] <task title>`

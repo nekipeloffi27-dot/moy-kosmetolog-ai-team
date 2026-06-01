@@ -1,179 +1,136 @@
 # PWA stack — moy-kosmetolog/packages/web
 
-## Stack (actual, not aspirational)
+## Stack (actual)
 
-- **Next.js 16** with App Router
-- **React 19**
-- **TypeScript** (strict mode)
-- **Tailwind CSS 4**
-- **Halo DS** — custom design system in `halo-ds/`, NOT shadcn/ui
-- **TanStack Query** for server state
-- **Zustand** for client state (e.g. auth store in `lib/store/auth.ts`)
-- **MediaPipe FaceMesh** for face-landmark detection in scan flow
-- **axios** API client (`lib/api.ts`)
-- date-fns for dates
-- Lucide icons (in addition to Halo iconography where relevant)
+- **Next.js 16.2.6** — App Router
+- **React 19.2.4**
+- **TypeScript** (strict)
+- **Tailwind CSS 4** (`@tailwindcss/postcss ^4`) — без `tailwind.config.ts`, токены через CSS `@theme` в `globals.css` и `halo-ds/tokens.css`
+- **Halo DS** — кастомная дизайн-система в `halo-ds/`, NOT shadcn/ui
+- **TanStack Query 5** — server state
+- **Zustand 5** — client state (auth store в `lib/store/auth.ts`)
+- **axios 1.x** — HTTP клиент (`lib/api.ts`)
+- **lucide-react 1.x** — иконки
+- **class-variance-authority + clsx + tailwind-merge** — утилиты для cn() и variant-стилей
+- **@mediapipe/tasks-vision** — face landmark detection в scan flow
 
-## PWA specifics
+## PWA-специфика
 
-- Service worker in `public/sw.js`
-- Manifest in `public/manifest.json`
-- Offline fallback in `public/offline.html`
-- PWA icons in `public/icons/`
-- `display: standalone` for true-app feel on iOS/Android
-- Safe-area-inset awareness for BottomNav on iOS
+- Service worker: `public/sw.js` (кастомный, bump-версии через `scripts/bump-sw-version.js`)
+- Manifest: `public/manifest.json`
+- Offline fallback: `public/offline.html`
+- PWA иконки: `public/icons/icon-192.png`, `icon-512.png`
+- Регистрация SW — в `app/layout.tsx` через inline script
+- `display: standalone` в manifest для iOS/Android
+- viewport: `userScalable: false`, `viewportFit: cover` — для safe-area на iPhone
 
-## Repo layout (inside packages/web/)
+## App Router layout (маршруты)
 
 ```
-packages/web/
-├── app/                       # Next.js App Router pages
-│   ├── layout.tsx
-│   ├── page.tsx               # Root → redirects
-│   ├── globals.css
-│   ├── callback/              # OAuth callbacks
-│   │   ├── telegram/page.tsx
-│   │   └── yandex/page.tsx
-│   └── main/                  # Authenticated routes
-│       ├── layout.tsx
-│       ├── home/page.tsx
-│       ├── chat/page.tsx
-│       ├── diary/page.tsx
-│       ├── profile/page.tsx
-│       ├── scan/page.tsx
-│       ├── scan/result/page.tsx
-│       ├── onboarding/page.tsx
-│       ├── otp/page.tsx
-│       └── welcome/page.tsx
-├── components/                # Feature components (NOT design-system)
-│   ├── auth/
-│   ├── home/
-│   ├── navigation/
-│   ├── scan/
-│   └── shared/
-├── halo-ds/                   # CUSTOM design system — source of truth
-│   ├── components/
-│   │   ├── HaloButton.tsx
-│   │   ├── HaloGlass.tsx
-│   │   ├── HaloRing.tsx
-│   │   ├── HaloSheet.tsx
-│   │   ├── HaloSpark.tsx
-│   │   ├── HaloTabBar.tsx
-│   │   ├── HaloType.tsx
-│   │   └── utils.ts
-│   ├── theme.ts               # TS theme tokens
-│   ├── tokens.css             # CSS variable design tokens
-│   └── animations.css
-├── lib/
-│   ├── api.ts                 # axios + auth interceptor
-│   ├── auth.ts
-│   ├── cosmeticApi.ts
-│   ├── queries.ts             # TanStack Query hooks
-│   ├── skin-i18n.ts           # i18n for skin condition labels
-│   ├── useFaceMesh.ts         # MediaPipe hook
-│   ├── mediapipe-preloader.ts
-│   ├── themes.ts
-│   ├── utils.ts
-│   ├── Providers.tsx
-│   ├── ThemeProvider.tsx
-│   └── store/auth.ts          # Zustand auth store
-├── public/                    # Static, PWA manifest, sw.js, icons
-├── middleware.ts              # Next.js auth guard
-├── tailwind.config.ts (Tailwind 4: in some setups via CSS @theme)
-├── tsconfig.json
-└── package.json
+packages/web/app/
+├── layout.tsx              — Root layout (шрифты, ThemeProvider, Providers, SW)
+├── page.tsx                — Root → redirect
+├── globals.css             — Tailwind + Halo DS + старые CSS-переменные
+├── callback/
+│   ├── telegram/           — Telegram OAuth callback
+│   └── yandex/             — Yandex OAuth callback
+└── main/                   — Authenticated routes
+    ├── layout.tsx           — Main layout (ConditionalBottomNav)
+    ├── welcome/             — Экран входа/регистрации (публичный)
+    ├── otp/                 — OTP-верификация (публичный)
+    ├── onboarding/          — Заполнение SkinProfile
+    ├── home/                — Главный экран (виджеты: балл, рутина, статья, погода)
+    ├── scan/                — AI-скан лица + result
+    ├── chat/                — AI-чат с Claude
+    ├── diary/               — Дневник кожи
+    └── profile/             — Профиль пользователя
 ```
 
-## Halo DS — design system rules
+**Публичные пути** (без авторизации, из `middleware.ts`): `/main/welcome`, `/main/otp`, `/main/scan`, `/main/scan/result`, `/callback`
 
-**This is non-negotiable.** Halo DS is the project's design language. Don't
-reach for shadcn, MUI, Chakra, or hand-rolled CSS-in-JS.
+## Компоненты
 
-Components live in `halo-ds/components/`:
-
-- `HaloButton` — primary/secondary/ghost variants
-- `HaloGlass` — frosted surface (used SPARINGLY — see anti-references)
-- `HaloRing` — circular progress (used for skin score)
-- `HaloSheet` — bottom sheet
-- `HaloSpark` — small accent indicator
-- `HaloTabBar` — bottom tab bar
-- `HaloType` — typography component with semantic variants
-
-Tokens come from `halo-ds/tokens.css` (CSS variables) and `halo-ds/theme.ts`
-(TS object). Use them — never hardcode hex colors or pixel values inside
-feature components.
-
-Tailwind 4 reads design tokens via `@theme` blocks in `globals.css`. Use
-Tailwind classes that map to tokens, e.g. `bg-canvas` rather than
-`bg-[#FAF7F2]`.
-
-If a needed component doesn't exist in Halo DS:
-- Small one-off → write in `components/<feature>/` using existing Halo
-  primitives + Tailwind.
-- General-purpose → propose extending Halo DS in the PR description.
-
-## Conventions
-
-- **Mobile-first**. Default styles target 375px. Use `md:` / `lg:` for wider.
-- **No `style={{...}}`** unless the value is computed at runtime.
-- **One default export per component file**. PascalCase. File name = component
-  name.
-- **API calls via TanStack Query**, never raw `fetch()` in `useEffect`. Hooks
-  live in `lib/queries.ts` (extend it, don't bypass it).
-- **Auth state via Zustand store** (`lib/store/auth.ts`). Don't introduce a
-  second auth source of truth.
-- **Anonymous flows**: for scan + cosmetic_analysis the user can be
-  unauthenticated. The store provides an `anonymous_token` (UUID stored in
-  localStorage). The API axios instance attaches it automatically when no
-  JWT is present.
-
-## Anthropic API integration (when adding chat-like features)
-
-The backend handles LLM calls (`packages/api-python/app/modules/chat/`).
-The PWA only renders responses streamed from the API. Don't call Anthropic
-directly from the PWA.
-
-Backend uses correct shape: endpoint `/v1/messages`, `x-api-key` header,
-`anthropic-version: 2023-06-01`, system as top-level field, images via
-`source` block.
-
-## Forms
-
-```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
-const schema = z.object({
-  phone: z.string().regex(/^\+7\d{10}$/, "Введи телефон в формате +7XXXXXXXXXX"),
-});
+```
+packages/web/components/
+├── auth/
+│   ├── AuthLoadingOverlay.tsx
+│   ├── LoginSheet.tsx
+│   └── TelegramLoginButton.tsx
+├── home/
+│   ├── ArticleSheetContent.tsx
+│   └── TaskRow.tsx
+├── navigation/
+│   ├── BottomNav.tsx
+│   └── ConditionalBottomNav.tsx
+├── scan/
+│   ├── CareCard.tsx
+│   ├── CosmeticAuthGate.tsx
+│   ├── CosmeticResultCard.tsx
+│   ├── FaceMeshOverlay.tsx
+│   ├── FrozenMeshOverlay.tsx
+│   ├── ProductPickerSheet.tsx
+│   ├── ScanTypeModal.tsx
+│   └── SkinDefectOverlay.tsx
+└── shared/
+    ├── MarkdownMessage.tsx
+    ├── PageTransition.tsx
+    ├── Skeleton.tsx
+    └── SkeletonScreens.tsx
 ```
 
-Error messages in Russian, "ты"-form.
+## Halo DS — правила
 
-## Testing
+**Не-negotiable.** Halo DS — дизайн-язык проекта. Не тянуть shadcn, MUI, Chakra, ручной CSS-in-JS.
 
-- Unit/component tests with vitest + @testing-library/react.
-- Test user-facing behavior, not implementation.
-- No snapshot tests except for design-token-derived components.
+```
+halo-ds/
+├── tokens.css         — CSS-переменные (цвета, типографика, радиусы, тени, motion) + 4 темы
+├── animations.css     — keyframes + helper классы (.halo-anim-*, .halo-scroll, .halo-press)
+├── theme.ts           — applyHaloTheme('cream'|'rose'|'sage'|'midnight') + preload script
+└── components/
+    ├── HaloButton.tsx      — variants: primary / accent / ghost / soft
+    ├── HaloGlass.tsx       — glass card container
+    ├── HaloRing.tsx        — 3-кольцевой дайал (hydration/texture/tone)
+    ├── HaloSheet.tsx       — rubber-drag bottom sheet
+    ├── HaloSpark.tsx       — inline sparkline
+    ├── HaloTabBar.tsx      — iOS-style bottom tab bar со sliding pill
+    ├── HaloType.tsx        — HaloHeading (Instrument Serif), HaloMono (JB Mono), HaloEm (italic)
+    ├── utils.ts            — cn() helper
+    └── index.ts            — barrel export
+```
 
-## Code style
+Если нужный компонент отсутствует:
+- Одноразовый → пиши в `components/<feature>/` на Halo-примитивах
+- Общий → предложи расширить Halo DS в PR description
 
-- Existing project config: ESLint + (likely) Prettier — follow.
-- TypeScript strict. No `any`. Use `unknown` and narrow.
+## Auth
 
-## Working in the monorepo
+- **Middleware**: `middleware.ts` читает cookie `access_token`, декодирует `exp` из JWT-payload (без верификации подписи) и редиректит на `/main/welcome` если токен протух или отсутствует
+- **Client state**: Zustand store в `lib/store/auth.ts` (`useAuthStore`: `isAuthed`, `login()`, `logout()`)
+- **Токены**: хранятся в cookies (`access_token`), Zustand читает их при инициализации
+- **Anonymous flow**: для scan без авторизации — `anonymous_token` (UUID в localStorage). axios-интерсептор в `lib/api.ts` подставляет его когда нет JWT
 
-- Workspace root is at the repo root, not at `packages/web/`. Some `pnpm`
-  commands need to be run from root.
-- For local dev: `pnpm --filter web dev` from root, or `cd packages/web &&
-  pnpm dev`.
-- Builds: `pnpm --filter web build`.
+## Data fetching
 
-## Pre-existing repo
+- Все API-вызовы через **TanStack Query** (`lib/queries.ts`). Не вызывать axios напрямую в `useEffect`.
+- Axios instance в `lib/api.ts` — базовый URL, auth interceptor
+- Backend вызывается через `/api/v1/...` (nginx проксирует на порт 3000)
 
-Repo: monorepo `moy-kosmetolog`, work in `packages/web/`. See
-`GITHUB_REPO_PWA` env var: `moy-kosmetolog#packages/web`.
-Default branch: `main`.
-PR title format: `[<feature_id_short>] <task title>`.
-Branch naming: `feat/<feature_id_short>/<slug>`.
+## Соглашения
+
+- **Mobile-first**. Дефолтные стили для 375px. `md:` / `lg:` для широких экранов
+- **Нет `style={{...}}`** если значение не вычисляется в runtime
+- **Один default export** на файл компонента. PascalCase. Имя файла = имя компонента
+- **Файлы маршрутов**: `page.tsx`, `layout.tsx` (kebab-case папки, PascalCase файлы компонентов)
+- TypeScript strict. Нет `any`. Используй `unknown` и сужай тип
+
+## Темы
+
+4 темы: `cream`, `rose`, `sage`, `midnight`. Переключение через `applyHaloTheme()` из `halo-ds/theme.ts`. Новые темы — добавлять блок `[data-halo-theme="x"] { … }` в `tokens.css`, не добавлять per-component код.
+
+## Работа в монорепе
+
+- Для локальной разработки: `cd packages/web && npm run dev`
+- Сборка: `npm run build` из `packages/web/`
+- Репо: `moy-kosmetolog`, рабочая папка `packages/web/`
+- Ветки: `feat/<feature_id_short>/<slug>`, PR: `[<feature_id_short>] <task title>`
