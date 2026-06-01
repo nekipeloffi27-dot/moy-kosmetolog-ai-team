@@ -75,9 +75,13 @@ async def run_cto_review(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool
                              actor="agent:cto_review", reason="no PR_OPEN tasks to review")
         return
 
+    user_notes: str = feature.context.get("user_review_notes", "").strip()
+    kickoff_text = f"🔍 Ревьюю {len(pr_tasks)} PR…"
+    if user_notes:
+        kickoff_text += f"\n\n<b>Заметки от пользователя:</b>\n<i>{user_notes[:600]}</i>"
     await bots.cto.send_message(
         chat_id=chat, message_thread_id=thread,
-        text=f"🔍 Ревьюю {len(pr_tasks)} PR…",
+        text=kickoff_text, parse_mode="HTML",
     )
 
     api_contract = feature.context.get("api_contract", {})
@@ -122,6 +126,7 @@ async def run_cto_review(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool
                 model=settings.model_cto_review,
                 codebase_tools=codebase_tools,
                 codebase_executor=executor,
+                user_notes=user_notes,
             )
         except Exception as e:
             logger.exception("Review failed for task {}: {}", task.id, e)
@@ -232,6 +237,7 @@ async def _review_one_pr(
     model: str,
     codebase_tools: list[dict] | None = None,
     codebase_executor=None,
+    user_notes: str = "",
 ) -> dict:
     """Fetch PR diff, ask Claude for verdict, return parsed JSON."""
     pr_files = await list_pr_files(repo_ref, task.github_pr_number)
@@ -265,6 +271,14 @@ async def _review_one_pr(
         f"**Type:** {task.type.value}\n"
         f"**Title:** {task.title}\n\n"
         f"**Description:**\n{task.description}\n\n"
+    )
+    if user_notes:
+        user_msg += (
+            f"---\n\n"
+            f"# User notes (consider these during review)\n\n"
+            f"{user_notes}\n\n"
+        )
+    user_msg += (
         f"---\n\n"
         f"{contract_text}\n\n"
         f"---\n\n"

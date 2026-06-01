@@ -64,13 +64,66 @@ async def cmd_redo_design(message: Message, command: CommandObject, bots: BotReg
         await message.answer("Команда работает только на этапе ревью дизайна.")
         return
 
-    feedback = (command.args or "").strip() or "(без комментариев)"
-    await update_context(pool, feature.id, design_feedback=feedback)
+    inline = (command.args or "").strip()
+    notes: list[dict] = feature.context.get("design_feedback_notes", [])
+
+    parts = [n["text"] for n in notes if n.get("text")]
+    if inline:
+        parts.append(inline)
+    combined = "\n".join(parts) if parts else "(без комментариев)"
+
+    # Save combined feedback; clear accumulated notes
+    await update_context(pool, feature.id,
+                         design_feedback=combined,
+                         design_feedback_notes=[])
     try:
         await transition(pool, feature.id, FeatureState.DESIGN_PENDING,
-                         actor="user", reason=f"redo: {feedback[:200]}")
-        await message.answer("Понял, передаю Designer переделать.")
+                         actor="user", reason=f"redo: {combined[:200]}")
+        await message.answer("Понял, передаю Дизайнеру с замечаниями.")
         await dispatch(feature.id, FeatureState.DESIGN_PENDING, bots, pool)
+    except IllegalTransition as e:
+        await message.answer(f"Не вышло: {e}")
+
+
+@router.message(Command("redo_review"))
+async def cmd_redo_review(message: Message, command: CommandObject, bots: BotRegistry) -> None:
+    """Re-trigger CTO code review, passing accumulated user feedback as context."""
+    feature, pool = await _get_feature_or_none(message)
+    if feature is None:
+        await message.answer("В этом треде нет привязанной фичи.")
+        return
+
+    _VALID = {FeatureState.CODING, FeatureState.DEV_DEPLOYED, FeatureState.REVIEW}
+    if feature.state not in _VALID:
+        await message.answer(
+            f"Команда работает из состояний: {', '.join(s.value for s in _VALID)}.\n"
+            f"Сейчас: <b>{feature.state.value}</b>",
+            parse_mode="HTML",
+        )
+        return
+
+    inline = (command.args or "").strip()
+    notes: list[dict] = feature.context.get("review_feedback_notes", [])
+
+    parts = [n["text"] for n in notes if n.get("text")]
+    if inline:
+        parts.append(inline)
+    user_notes = "\n".join(parts) if parts else ""
+
+    await update_context(pool, feature.id,
+                         user_review_notes=user_notes,
+                         review_feedback_notes=[])
+
+    try:
+        if feature.state != FeatureState.REVIEW:
+            await transition(pool, feature.id, FeatureState.REVIEW,
+                             actor="user", reason="/redo_review")
+        await message.answer(
+            "Запускаю CTO ревью"
+            + (f" с твоими заметками:\n<i>{user_notes[:400]}</i>" if user_notes else "") + ".",
+            parse_mode="HTML",
+        )
+        await dispatch(feature.id, FeatureState.REVIEW, bots, pool)
     except IllegalTransition as e:
         await message.answer(f"Не вышло: {e}")
 

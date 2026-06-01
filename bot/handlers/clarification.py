@@ -1,9 +1,8 @@
-"""Clarification stage message handler.
+"""Thread text handler — captures user messages during active feature states.
 
-During CLARIFICATION state, any non-command text message from the user in a
-feature thread is treated as a clarification reply. It gets saved to
-clarification_history, then after a 5-second debounce the PM agent is re-run
-so it can update its understanding.
+- CLARIFICATION : saved to clarification_history; PM re-runs after 5 s debounce.
+- DESIGN_REVIEW : saved to context.design_feedback_notes; /redo_design uses them.
+- REVIEW/CODING : saved to context.review_feedback_notes; /redo_review uses them.
 """
 from __future__ import annotations
 
@@ -19,12 +18,14 @@ from core.bots import BotRegistry
 from core.db import get_pool
 from core.enums import FeatureState
 from core.orchestrator import dispatch
-from services.features import append_clarification_history, get_feature_by_thread
+from services.features import (
+    append_clarification_history, append_to_context_list, get_feature_by_thread,
+)
 
 
 router = Router(name="clarification")
 
-# Debounce tasks: feature_id → asyncio.Task
+# Debounce tasks: feature_id → asyncio.Task (CLARIFICATION only)
 _debounce_tasks: dict[UUID, asyncio.Task] = {}
 
 
@@ -35,40 +36,61 @@ async def _pm_rerun(feature_id: UUID, bots: BotRegistry, pool) -> None:
 
 
 @router.message(F.text & ~F.text.startswith("/") & F.message_thread_id)
-async def handle_clarification_reply(message: Message, bots: BotRegistry) -> None:
+async def handle_thread_text(message: Message, bots: BotRegistry) -> None:
     pool = get_pool()
     thread_id = message.message_thread_id
     if thread_id is None:
         return
 
     feature = await get_feature_by_thread(pool, message.chat.id, thread_id)
-    if feature is None or feature.state != FeatureState.CLARIFICATION:
+    if feature is None:
         return
 
     text = (message.text or "").strip()
     if len(text) <= 5:
         return
 
-    # Save user message to clarification history
-    entry = {
-        "role": "user",
-        "text": text,
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
-    await append_clarification_history(pool, feature.id, entry)
-    logger.info("Saved clarification reply for feature {}: {!r}", feature.id, text[:80])
+    ts = datetime.now(timezone.utc).isoformat()
 
-    # Acknowledge receipt
-    await message.reply(
-        "Записал. Когда напишешь всё что нужно — <code>/confirmed</code> "
-        "чтобы передать дальше, или жди — PM обновит понимание через несколько секунд.",
-        parse_mode="HTML",
-    )
+    # ─── CLARIFICATION ───────────────────────────────────────────────────────
+    if feature.state == FeatureState.CLARIFICATION:
+        entry = {"role": "user", "text": text, "ts": ts}
+        await append_clarification_history(pool, feature.id, entry)
+        logger.info("Clarification reply for feature {}: {!r}", feature.id, text[:80])
 
-    # Debounce: cancel previous timer, start new 5-second countdown
-    existing = _debounce_tasks.get(feature.id)
-    if existing and not existing.done():
-        existing.cancel()
-    _debounce_tasks[feature.id] = asyncio.create_task(
-        _pm_rerun(feature.id, bots, pool)
-    )
+        await message.reply(
+            "Записал. Когда напишешь всё что нужно — <code>/confirmed</code> "
+            "чтобы передать дальше, или жди — PM обновит понимание через несколько секунд.",
+            parse_mode="HTML",
+        )
+
+        existing = _debounce_tasks.get(feature.id)
+        if existing and not existing.done():
+            existing.cancel()
+        _debounce_tasks[feature.id] = asyncio.create_task(
+            _pm_rerun(feature.id, bots, pool)
+        )
+
+    # ─── DESIGN_REVIEW ───────────────────────────────────────────────────────
+    elif feature.state == FeatureState.DESIGN_REVIEW:
+        entry = {"text": text, "ts": ts}
+        await append_to_context_list(pool, feature.id, "design_feedback_notes", entry)
+        logger.info("Design feedback note for feature {}: {!r}", feature.id, text[:80])
+
+        await message.reply(
+            "Записал замечание. Пиши все что нужно, потом "
+            "<code>/redo_design</code> — передам Дизайнеру с накопленными замечаниями.",
+            parse_mode="HTML",
+        )
+
+    # ─── REVIEW / CODING ─────────────────────────────────────────────────────
+    elif feature.state in (FeatureState.REVIEW, FeatureState.CODING):
+        entry = {"text": text, "ts": ts}
+        await append_to_context_list(pool, feature.id, "review_feedback_notes", entry)
+        logger.info("Review feedback note for feature {}: {!r}", feature.id, text[:80])
+
+        await message.reply(
+            "Записал. После ревью — <code>/redo_review</code> запустит повторное "
+            "CTO-ревью с твоими заметками.",
+            parse_mode="HTML",
+        )

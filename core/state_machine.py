@@ -49,6 +49,7 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
     },
     FeatureState.DEV_DEPLOYED: {
         FeatureState.TESTING,            # deploy succeeded
+        FeatureState.REVIEW,             # /redo_review — re-review before testing
         FeatureState.BLOCKED,            # deploy failed
         FeatureState.REVERTING,          # rollback dev deploy
         FeatureState.FAILED,

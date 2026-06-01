@@ -115,6 +115,27 @@ async def append_clarification_history(
         )
 
 
+async def append_to_context_list(
+    pool: asyncpg.Pool, feature_id: UUID, key: str, item: dict
+) -> None:
+    """Append one item to an array stored at context[key]. Creates key if absent."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE features
+            SET context = jsonb_set(
+                    context,
+                    ARRAY[$1::text],
+                    COALESCE(context->$1, '[]'::jsonb) || $2::jsonb,
+                    true
+                ),
+                updated_at = NOW()
+            WHERE id = $3
+            """,
+            key, json.dumps([item]), feature_id,
+        )
+
+
 async def add_budget_used(pool: asyncpg.Pool, feature_id: UUID, cents: int) -> int:
     """Add to budget_used_cents, return new total."""
     async with pool.acquire() as conn:

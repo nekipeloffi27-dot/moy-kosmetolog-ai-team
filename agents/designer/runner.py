@@ -162,9 +162,11 @@ async def run_designer(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) 
     await bots.pm.send_message(
         chat_id=chat, message_thread_id=thread,
         text=(
-            "Что дальше? Ответь:\n"
+            "Что дальше?\n\n"
             "<code>/approve_design</code> — нравится, режем на задачи\n"
-            "<code>/redo_design что переделать</code> — переделать с замечаниями"
+            "<code>/redo_design</code> — переделать\n\n"
+            "<i>Замечания можно писать прямо в треде — накапливаются автоматически. "
+            "Потом <code>/redo_design</code> без аргументов.</i>"
         ),
         parse_mode="HTML",
     )
