@@ -18,6 +18,8 @@ class FeatureState(StrEnum):
     FIX_PROPOSED = "fix_proposed"
     APPLYING_FIX = "applying_fix"
     DIAGNOSTICS_DONE = "diagnostics_done"
+    REVERTING = "reverting"
+    REVERTED = "reverted"
     BLOCKED = "blocked"
     FAILED = "failed"
 
@@ -53,6 +55,8 @@ FEATURE_STATE_LABELS_RU: dict[FeatureState, str] = {
     FeatureState.FIX_PROPOSED:     "💡 Фикс предложен — /apply_fix",
     FeatureState.APPLYING_FIX:     "⚙️ Применяю фикс…",
     FeatureState.DIAGNOSTICS_DONE: "✅ Диагностика завершена",
+    FeatureState.REVERTING:        "⏪ Откатываю изменения…",
+    FeatureState.REVERTED:         "↩️ Откат выполнен",
     FeatureState.BLOCKED:          "⛔ Заблокировано — нужен ты",
     FeatureState.FAILED:           "💥 Упало",
 }

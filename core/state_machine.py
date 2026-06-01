@@ -50,19 +50,22 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
     FeatureState.DEV_DEPLOYED: {
         FeatureState.TESTING,            # deploy succeeded
         FeatureState.BLOCKED,            # deploy failed
+        FeatureState.REVERTING,          # rollback dev deploy
         FeatureState.FAILED,
     },
     FeatureState.TESTING: {
         FeatureState.PROD_READY,         # user approved
         FeatureState.TASKS_PENDING,      # user found problems → re-task
         FeatureState.BLOCKED,
+        FeatureState.REVERTING,          # rollback after testing found critical issue
     },
     FeatureState.PROD_READY: {
         FeatureState.PROD_DEPLOYED,
         FeatureState.BLOCKED,            # prod deploy failed
+        FeatureState.REVERTING,
         FeatureState.FAILED,
     },
-    FeatureState.PROD_DEPLOYED: set(),        # terminal
+    FeatureState.PROD_DEPLOYED: {FeatureState.REVERTING},   # rollback
     FeatureState.DESIGN_DONE:   set(),        # terminal (design-only flow)
     FeatureState.DIAGNOSTICS: {
         FeatureState.FIX_PROPOSED,            # CTO ops found a shell fix
@@ -81,6 +84,11 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
         FeatureState.FAILED,                  # fix failed
     },
     FeatureState.DIAGNOSTICS_DONE: set(),     # terminal
+    FeatureState.REVERTING: {
+        FeatureState.REVERTED,                # all revert PRs created OK
+        FeatureState.FAILED,                  # could not create any revert PR
+    },
+    FeatureState.REVERTED: set(),             # terminal
     FeatureState.BLOCKED: {              # human unblocks → resume from a sensible state
         FeatureState.DESIGN_PENDING,
         FeatureState.TASKS_PENDING,
@@ -90,6 +98,7 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
         FeatureState.TESTING,
         FeatureState.PROD_READY,         # retry prod deploy
         FeatureState.DIAGNOSTICS,        # resume diagnostics session
+        FeatureState.REVERTING,          # rollback instead of retrying
         FeatureState.FAILED,
     },
     FeatureState.FAILED: set(),          # terminal
@@ -131,7 +140,7 @@ async def transition(
                 SET state = $1,
                     updated_at = NOW(),
                     completed_at = CASE WHEN $1::feature_state IN
-                                        ('prod_deployed','failed','design_done','diagnostics_done')
+                                        ('prod_deployed','failed','design_done','diagnostics_done','reverted')
                                         THEN NOW() ELSE completed_at END
                 WHERE id = $2
                 """,

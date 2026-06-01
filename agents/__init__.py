@@ -6,3 +6,4 @@ from agents.dev         import runner as _dev            # noqa: F401
 from agents.cto_review  import runner as _cto_review     # noqa: F401  (M6)
 from agents.cto_deploy  import runner as _cto_deploy     # noqa: F401  (M6)
 from agents.cto_ops     import runner as _cto_ops        # noqa: F401  (M6)
+from agents.cto_revert  import runner as _cto_revert     # noqa: F401  (M6)

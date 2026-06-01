@@ -65,7 +65,7 @@ async def list_active_features(
 ) -> list[Feature]:
     query = """
         SELECT * FROM features
-        WHERE state NOT IN ('prod_deployed', 'failed', 'design_done', 'diagnostics_done')
+        WHERE state NOT IN ('prod_deployed', 'failed', 'design_done', 'diagnostics_done', 'reverted')
         {user_filter}
         ORDER BY updated_at DESC
         LIMIT $1
