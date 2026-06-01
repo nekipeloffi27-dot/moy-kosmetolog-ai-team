@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
@@ -276,3 +276,132 @@ async def cmd_cancel(message: Message) -> None:
         await message.answer("Фича отменена.")
     except IllegalTransition as e:
         await message.answer(f"Не могу отменить: {e}")
+
+
+# ─── /unblock and /retry ──────────────────────────────────────────────────────
+
+_UNBLOCK_FALLBACK = FeatureState.DESIGN_PENDING
+
+
+async def _last_active_state_before_blocked(
+    pool: asyncpg.Pool, feature_id: UUID
+) -> FeatureState:
+    """Return the state the feature was in just before it entered BLOCKED or FAILED.
+
+    Queries state_transitions for the most recent transition whose to_state is
+    'blocked' or 'failed' and returns its from_state.  Falls back to
+    DESIGN_PENDING if the table is unavailable or no matching row is found.
+    """
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT from_state FROM state_transitions
+                WHERE feature_id = $1 AND to_state IN ('blocked', 'failed')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                feature_id,
+            )
+        if row is None:
+            logger.warning(
+                "No blocked/failed transition found for feature {}; defaulting to {}",
+                feature_id, _UNBLOCK_FALLBACK,
+            )
+            return _UNBLOCK_FALLBACK
+        return FeatureState(row["from_state"])
+    except Exception as e:
+        logger.warning(
+            "Could not query state_transitions for feature {} ({}); defaulting to {}",
+            feature_id, e, _UNBLOCK_FALLBACK,
+        )
+        return _UNBLOCK_FALLBACK
+
+
+async def _resolve_unblock_target(
+    message: Message,
+    command: CommandObject,
+    pool: asyncpg.Pool,
+    feature_id: UUID,
+) -> FeatureState | None:
+    """Parse optional target_state arg; return None and reply on validation error."""
+    raw = (command.args or "").strip()
+    if not raw:
+        return await _last_active_state_before_blocked(pool, feature_id)
+    try:
+        return FeatureState(raw)
+    except ValueError:
+        await message.answer(
+            f"Неизвестное состояние: <code>{raw}</code>.\n"
+            "Укажи одно из значений <code>FeatureState</code>, например: "
+            "<code>design_pending</code>, <code>tasks_pending</code>, <code>coding</code>…",
+            parse_mode="HTML",
+        )
+        return None
+
+
+@router.message(Command("unblock"))
+async def cmd_unblock(message: Message, command: CommandObject, bots: BotRegistry) -> None:
+    """Move a BLOCKED/FAILED feature back to an active state without dispatching an agent."""
+    pool = get_pool()
+    feature = await get_feature_by_thread(pool, message.chat.id, message.message_thread_id or 0)
+    if feature is None:
+        await message.answer("В этом треде нет привязанной фичи.")
+        return
+
+    if feature.state not in (FeatureState.BLOCKED, FeatureState.FAILED):
+        label = FEATURE_STATE_LABELS_RU[feature.state]
+        await message.answer(f"Фича не заблокирована. Текущее состояние: {label}")
+        return
+
+    target = await _resolve_unblock_target(message, command, pool, feature.id)
+    if target is None:
+        return
+
+    try:
+        await transition(pool, feature.id, target,
+                         actor="user:unblock", reason="manual unblock from chat")
+    except IllegalTransition as e:
+        await message.answer(f"Не могу разблокировать: <code>{e}</code>", parse_mode="HTML")
+        return
+
+    label = FEATURE_STATE_LABELS_RU[target]
+    await message.answer(
+        f"🔓 Разблокировано. Состояние: {label}.\n"
+        "Чтобы запустить агента заново — используй подходящую команду "
+        "для этого состояния (<code>/redo_design</code>, <code>/redo_review</code>, и т.д.).",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("retry"))
+async def cmd_retry(message: Message, command: CommandObject, bots: BotRegistry) -> None:
+    """Move a BLOCKED/FAILED feature back to an active state and immediately dispatch the agent."""
+    pool = get_pool()
+    feature = await get_feature_by_thread(pool, message.chat.id, message.message_thread_id or 0)
+    if feature is None:
+        await message.answer("В этом треде нет привязанной фичи.")
+        return
+
+    if feature.state not in (FeatureState.BLOCKED, FeatureState.FAILED):
+        label = FEATURE_STATE_LABELS_RU[feature.state]
+        await message.answer(f"Фича не заблокирована. Текущее состояние: {label}")
+        return
+
+    target = await _resolve_unblock_target(message, command, pool, feature.id)
+    if target is None:
+        return
+
+    try:
+        await transition(pool, feature.id, target,
+                         actor="user:retry", reason="manual retry from chat")
+    except IllegalTransition as e:
+        await message.answer(f"Не могу перезапустить: <code>{e}</code>", parse_mode="HTML")
+        return
+
+    label = FEATURE_STATE_LABELS_RU[target]
+    await message.answer(
+        f"🔄 Перезапускаю с состояния: {label}.",
+        parse_mode="HTML",
+    )
+    await dispatch(feature.id, target, bots, pool)
