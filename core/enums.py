@@ -14,6 +14,10 @@ class FeatureState(StrEnum):
     PROD_READY = "prod_ready"
     PROD_DEPLOYED = "prod_deployed"
     DESIGN_DONE = "design_done"
+    DIAGNOSTICS = "diagnostics"
+    FIX_PROPOSED = "fix_proposed"
+    APPLYING_FIX = "applying_fix"
+    DIAGNOSTICS_DONE = "diagnostics_done"
     BLOCKED = "blocked"
     FAILED = "failed"
 
@@ -44,7 +48,11 @@ FEATURE_STATE_LABELS_RU: dict[FeatureState, str] = {
     FeatureState.TESTING:         "🧪 Жду твою проверку",
     FeatureState.PROD_READY:      "✅ Готово к проду",
     FeatureState.PROD_DEPLOYED:   "🎉 В проде",
-    FeatureState.DESIGN_DONE:     "🖼 Дизайн готов",
-    FeatureState.BLOCKED:         "⛔ Заблокировано — нужен ты",
-    FeatureState.FAILED:          "💥 Упало",
+    FeatureState.DESIGN_DONE:      "🖼 Дизайн готов",
+    FeatureState.DIAGNOSTICS:      "🔎 Диагностика",
+    FeatureState.FIX_PROPOSED:     "💡 Фикс предложен — /apply_fix",
+    FeatureState.APPLYING_FIX:     "⚙️ Применяю фикс…",
+    FeatureState.DIAGNOSTICS_DONE: "✅ Диагностика завершена",
+    FeatureState.BLOCKED:          "⛔ Заблокировано — нужен ты",
+    FeatureState.FAILED:           "💥 Упало",
 }

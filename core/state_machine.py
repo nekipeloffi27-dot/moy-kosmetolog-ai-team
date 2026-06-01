@@ -62,8 +62,25 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
         FeatureState.BLOCKED,            # prod deploy failed
         FeatureState.FAILED,
     },
-    FeatureState.PROD_DEPLOYED: set(),   # terminal
-    FeatureState.DESIGN_DONE:   set(),   # terminal (design-only flow)
+    FeatureState.PROD_DEPLOYED: set(),        # terminal
+    FeatureState.DESIGN_DONE:   set(),        # terminal (design-only flow)
+    FeatureState.DIAGNOSTICS: {
+        FeatureState.FIX_PROPOSED,            # CTO ops found a shell fix
+        FeatureState.DIAGNOSTICS_DONE,        # fix type is manual or PR created
+        FeatureState.BLOCKED,
+        FeatureState.FAILED,
+    },
+    FeatureState.FIX_PROPOSED: {
+        FeatureState.APPLYING_FIX,            # /apply_fix
+        FeatureState.DIAGNOSTICS,             # re-run diagnosis
+        FeatureState.DIAGNOSTICS_DONE,        # resolved manually
+        FeatureState.FAILED,
+    },
+    FeatureState.APPLYING_FIX: {
+        FeatureState.DIAGNOSTICS_DONE,        # fix applied OK
+        FeatureState.FAILED,                  # fix failed
+    },
+    FeatureState.DIAGNOSTICS_DONE: set(),     # terminal
     FeatureState.BLOCKED: {              # human unblocks → resume from a sensible state
         FeatureState.DESIGN_PENDING,
         FeatureState.TASKS_PENDING,
@@ -72,6 +89,7 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
         FeatureState.DEV_DEPLOYED,       # retry deploy
         FeatureState.TESTING,
         FeatureState.PROD_READY,         # retry prod deploy
+        FeatureState.DIAGNOSTICS,        # resume diagnostics session
         FeatureState.FAILED,
     },
     FeatureState.FAILED: set(),          # terminal
@@ -112,7 +130,8 @@ async def transition(
                 UPDATE features
                 SET state = $1,
                     updated_at = NOW(),
-                    completed_at = CASE WHEN $1::feature_state IN ('prod_deployed','failed','design_done')
+                    completed_at = CASE WHEN $1::feature_state IN
+                                        ('prod_deployed','failed','design_done','diagnostics_done')
                                         THEN NOW() ELSE completed_at END
                 WHERE id = $2
                 """,

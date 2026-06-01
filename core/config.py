@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     deploy_prod_command: str = Field("", alias="DEPLOY_PROD_COMMAND")
     deploy_timeout:      int = Field(900, alias="DEPLOY_TIMEOUT")  # 15 min
 
+    # ─── Ops (CTO diagnostics mode) ───
+    # Comma-separated container names allowed for `docker logs` in ops mode.
+    ops_allowed_containers: str = Field(
+        "ai-team-bot,ai-team-db,ai-team-redis",
+        alias="OPS_ALLOWED_CONTAINERS",
+    )
+    # Comma-separated SSH hosts allowed for read-only remote commands.
+    # Leave empty to disable SSH ops entirely.
+    ops_allowed_ssh_hosts: str = Field("", alias="OPS_ALLOWED_SSH_HOSTS")
+    # Timeout (seconds) for shell commands run via /apply_fix.
+    ops_apply_fix_timeout: int = Field(120, alias="OPS_APPLY_FIX_TIMEOUT")
+
     # ─── Codebase snapshot (read-only for Designer / CTO tasking) ───
     # Clone the monorepo here manually; agents read it to avoid hallucinating components.
     # refresh_snapshot() runs `git fetch && git reset --hard origin/main` before each use.

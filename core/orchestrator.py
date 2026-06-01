@@ -63,6 +63,7 @@ async def resume_pending(bots: BotRegistry, pool: asyncpg.Pool) -> None:
         FeatureState.REVIEW,
         FeatureState.DEV_DEPLOYED,
         FeatureState.PROD_READY,
+        FeatureState.DIAGNOSTICS,
     ]
     async with pool.acquire() as conn:
         rows = await conn.fetch(

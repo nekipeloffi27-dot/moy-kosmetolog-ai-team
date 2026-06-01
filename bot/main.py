@@ -20,7 +20,7 @@ from core.config import get_settings
 from core.db import close_pool, get_pool, init_pool
 from core.orchestrator import resume_pending
 
-from bot.handlers import admin, clarification, feature, feedback
+from bot.handlers import admin, clarification, feature, feedback, ops
 
 # Importing agents triggers their @register_agent decorators
 import agents  # noqa: F401
@@ -83,6 +83,7 @@ async def main() -> None:
     dp.include_router(feature.router)
     dp.include_router(feedback.router)
     dp.include_router(clarification.router)
+    dp.include_router(ops.router)
 
     # Resume features that were mid-flight at last shutdown
     await resume_pending(bots, pool)
