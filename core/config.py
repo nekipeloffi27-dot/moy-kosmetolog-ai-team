@@ -90,7 +90,7 @@ class Settings(BaseSettings):
 
     # ─── Designer ───
     # Limits codebase tool-use iterations to control cost on edit tasks.
-    designer_max_tool_iterations: int = Field(4, alias="DESIGNER_MAX_TOOL_ITERATIONS")
+    designer_max_tool_iterations: int = Field(8, alias="DESIGNER_MAX_TOOL_ITERATIONS")
 
     # ─── Skills ───
     skills_enabled: bool = Field(True, alias="SKILLS_ENABLED")
