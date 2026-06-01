@@ -10,7 +10,7 @@ from core.db import get_pool
 from core.enums import FeatureState
 from core.orchestrator import dispatch
 from core.state_machine import IllegalTransition, transition
-from services.features import get_feature_by_thread, update_context
+from services.features import get_feature, get_feature_by_thread, update_context
 
 
 router = Router(name="feedback")
@@ -30,13 +30,31 @@ async def cmd_approve_design(message: Message, bots: BotRegistry) -> None:
     if not feature or feature.state != FeatureState.DESIGN_REVIEW:
         await message.answer("Сейчас не на этапе ревью дизайна.")
         return
-    try:
-        await transition(pool, feature.id, FeatureState.TASKS_PENDING,
-                         actor="user", reason="design approved")
-        await message.answer("Принято. CTO режет на задачи.")
-        await dispatch(feature.id, FeatureState.TASKS_PENDING, bots, pool)
-    except IllegalTransition as e:
-        await message.answer(f"Не вышло: {e}")
+
+    if feature.context.get("design_only"):
+        try:
+            await transition(pool, feature.id, FeatureState.DESIGN_DONE,
+                             actor="user", reason="design approved (design-only)")
+            await bots.pm.send_message(
+                chat_id=feature.telegram_chat_id,
+                message_thread_id=feature.telegram_thread_id,
+                text=(
+                    "✅ Дизайн готов. Mockup'ы сохранены в треде.\n\n"
+                    "Если нужна разработка — создай фичу через "
+                    "<code>/feature</code> с тем же описанием."
+                ),
+                parse_mode="HTML",
+            )
+        except IllegalTransition as e:
+            await message.answer(f"Не вышло: {e}")
+    else:
+        try:
+            await transition(pool, feature.id, FeatureState.TASKS_PENDING,
+                             actor="user", reason="design approved")
+            await message.answer("Принято. CTO режет на задачи.")
+            await dispatch(feature.id, FeatureState.TASKS_PENDING, bots, pool)
+        except IllegalTransition as e:
+            await message.answer(f"Не вышло: {e}")
 
 
 @router.message(Command("redo_design"))

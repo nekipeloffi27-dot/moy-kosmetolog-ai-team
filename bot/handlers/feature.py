@@ -28,9 +28,25 @@ SCREENSHOTS_DIR = Path("/app/mockups/screenshots")
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.message(Command("feature"))
-async def cmd_feature(message: Message, command: CommandObject, bots: BotRegistry) -> None:
-    """Create a new feature. Bot used: PM (for downloading photos + topic creation)."""
+def _feature_badge(context: dict) -> str:
+    """Return a short badge string for feature type, or empty string."""
+    if context.get("skip_design"):
+        return " [ops]"
+    if context.get("design_only"):
+        return " [design-only]"
+    return ""
+
+
+async def _create_feature_common(
+    message: Message,
+    bots: BotRegistry,
+    title: str,
+    description: str,
+    *,
+    initial_context: dict | None = None,
+    screenshot_path: str | None = None,
+) -> None:
+    """Shared logic for /feature, /cto_task, /design_only."""
     settings = get_settings()
     if settings.telegram_feature_group_id == 0:
         await message.answer(
@@ -42,9 +58,60 @@ async def cmd_feature(message: Message, command: CommandObject, bots: BotRegistr
         )
         return
 
+    pool = get_pool()
+    user_id = message.from_user.id if message.from_user else 0
+    short_id = uuid4().hex[:6]
+
+    thread_id = await create_feature_topic(
+        bots.pm,
+        chat_id=settings.telegram_feature_group_id,
+        feature_title=title,
+        feature_short_id=short_id,
+    )
+
+    ctx = initial_context or {}
+    feature = await create_feature(
+        pool,
+        title=title,
+        description=description,
+        telegram_chat_id=settings.telegram_feature_group_id,
+        telegram_thread_id=thread_id,
+        telegram_user_id=user_id,
+        screenshot_path=screenshot_path,
+        budget_cap_cents=settings.default_budget_cap_cents,
+        initial_context=ctx,
+    )
+
+    badge = _feature_badge(ctx)
+    await message.answer(
+        f"✅ Фича <b>{title}</b>{badge} создана\n"
+        f"ID: <code>{feature.id}</code>\n"
+        f"Бюджет: ${feature.budget_cap_cents / 100:.2f}\n\n"
+        f"Открой тред в группе — вся работа пойдёт там.",
+        parse_mode="HTML",
+    )
+
+    intro = (
+        f"🎬 <b>{title}</b>{badge}\n\n"
+        f"<i>{description}</i>\n\n"
+        f"Состояние: {FEATURE_STATE_LABELS_RU[FeatureState.CLARIFICATION]}\n"
+        f"Бюджет: ${feature.budget_cap_cents / 100:.2f}"
+    )
+    await post_to_thread(
+        bots.pm,
+        chat_id=settings.telegram_feature_group_id,
+        thread_id=thread_id,
+        text=intro,
+    )
+
+    await dispatch(feature.id, FeatureState.CLARIFICATION, bots, pool)
+
+
+@router.message(Command("feature"))
+async def cmd_feature(message: Message, command: CommandObject, bots: BotRegistry) -> None:
+    """Create a new feature — full pipeline (design → coding → deploy)."""
     raw = command.args or message.caption or ""
     raw = re.sub(r"^/feature(@\w+)?\s*", "", raw).strip()
-
     if not raw:
         await message.answer(
             "Использование: <code>/feature краткий заголовок | развёрнутое описание</code>",
@@ -64,52 +131,56 @@ async def cmd_feature(message: Message, command: CommandObject, bots: BotRegistr
         await bots.pm.download(photo, destination=screenshot_path)
         logger.info("Saved screenshot {} for feature '{}'", screenshot_path, title)
 
-    pool = get_pool()
-    user_id = message.from_user.id if message.from_user else 0
+    await _create_feature_common(message, bots, title, description,
+                                 screenshot_path=screenshot_path)
 
-    short_id = uuid4().hex[:6]
-    # PM creates the topic — it's the coordinator
-    thread_id = await create_feature_topic(
-        bots.pm,
-        chat_id=settings.telegram_feature_group_id,
-        feature_title=title,
-        feature_short_id=short_id,
-    )
 
-    feature = await create_feature(
-        pool,
-        title=title,
-        description=description,
-        telegram_chat_id=settings.telegram_feature_group_id,
-        telegram_thread_id=thread_id,
-        telegram_user_id=user_id,
-        screenshot_path=screenshot_path,
-        budget_cap_cents=settings.default_budget_cap_cents,
-    )
+@router.message(Command("cto_task"))
+async def cmd_cto_task(message: Message, command: CommandObject, bots: BotRegistry) -> None:
+    """Create a no-design task: backend, infra, migrations, bug fixes.
 
-    await message.answer(
-        f"✅ Фича <b>{title}</b> создана\n"
-        f"ID: <code>{feature.id}</code>\n"
-        f"Бюджет: ${feature.budget_cap_cents / 100:.2f}\n\n"
-        f"Открой тред в группе — вся работа пойдёт там.",
-        parse_mode="HTML",
-    )
+    After /confirmed, skips Designer and goes straight to CTO tasking.
+    """
+    raw = (command.args or "").strip()
+    if not raw:
+        await message.answer(
+            "Использование: <code>/cto_task краткий заголовок | развёрнутое описание</code>\n\n"
+            "Для задач без дизайна: бэкенд, миграции, инфраструктура, фиксы API.",
+            parse_mode="HTML",
+        )
+        return
 
-    # PM posts the feature intro
-    intro = (
-        f"🎬 <b>{title}</b>\n\n"
-        f"<i>{description}</i>\n\n"
-        f"Состояние: {FEATURE_STATE_LABELS_RU[FeatureState.CLARIFICATION]}\n"
-        f"Бюджет: ${feature.budget_cap_cents / 100:.2f}"
-    )
-    await post_to_thread(
-        bots.pm,
-        chat_id=settings.telegram_feature_group_id,
-        thread_id=thread_id,
-        text=intro,
-    )
+    if "|" in raw:
+        title, description = (p.strip() for p in raw.split("|", 1))
+    else:
+        title, description = raw, "(описание не дано)"
 
-    await dispatch(feature.id, FeatureState.CLARIFICATION, bots, pool)
+    await _create_feature_common(message, bots, title, description,
+                                 initial_context={"skip_design": True})
+
+
+@router.message(Command("design_only"))
+async def cmd_design_only(message: Message, command: CommandObject, bots: BotRegistry) -> None:
+    """Create a design-only task: prototype mockups without coding.
+
+    After /approve_design, goes to DESIGN_DONE (terminal) instead of coding.
+    """
+    raw = (command.args or "").strip()
+    if not raw:
+        await message.answer(
+            "Использование: <code>/design_only краткий заголовок | развёрнутое описание</code>\n\n"
+            "Только дизайн и мокапы, без разработки.",
+            parse_mode="HTML",
+        )
+        return
+
+    if "|" in raw:
+        title, description = (p.strip() for p in raw.split("|", 1))
+    else:
+        title, description = raw, "(описание не дано)"
+
+    await _create_feature_common(message, bots, title, description,
+                                 initial_context={"design_only": True})
 
 
 @router.message(Command("confirmed"))
@@ -162,8 +233,9 @@ async def cmd_status(message: Message) -> None:
         return
 
     label = FEATURE_STATE_LABELS_RU[feature.state]
+    badge = _feature_badge(feature.context)
     await message.answer(
-        f"<b>{feature.title}</b>\n"
+        f"<b>{feature.title}</b>{badge}\n"
         f"Статус: {label}\n"
         f"Использовано: ${feature.budget_used_cents / 100:.2f} "
         f"из ${feature.budget_cap_cents / 100:.2f}\n"
@@ -185,7 +257,8 @@ async def cmd_list(message: Message) -> None:
     lines = ["<b>Активные фичи:</b>", ""]
     for f in features:
         label = FEATURE_STATE_LABELS_RU[f.state]
-        lines.append(f"• <b>{f.title}</b> — {label}")
+        badge = _feature_badge(f.context)
+        lines.append(f"• <b>{f.title}</b>{badge} — {label}")
     await message.answer("\n".join(lines), parse_mode="HTML")
 
 

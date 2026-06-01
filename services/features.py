@@ -22,6 +22,7 @@ async def create_feature(
     screenshot_path: str | None = None,
     budget_cap_cents: int = 500,
     state: FeatureState = FeatureState.CLARIFICATION,
+    initial_context: dict | None = None,
 ) -> Feature:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -29,14 +30,15 @@ async def create_feature(
             INSERT INTO features (
                 title, description, screenshot_path,
                 telegram_chat_id, telegram_thread_id, telegram_user_id,
-                budget_cap_cents, state
+                budget_cap_cents, state, context
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             """,
             title, description, screenshot_path,
             telegram_chat_id, telegram_thread_id, telegram_user_id,
             budget_cap_cents, state.value,
+            json.dumps(initial_context or {}),
         )
     return _row_to_feature(row)
 
@@ -63,7 +65,7 @@ async def list_active_features(
 ) -> list[Feature]:
     query = """
         SELECT * FROM features
-        WHERE state NOT IN ('prod_deployed', 'failed')
+        WHERE state NOT IN ('prod_deployed', 'failed', 'design_done')
         {user_filter}
         ORDER BY updated_at DESC
         LIMIT $1

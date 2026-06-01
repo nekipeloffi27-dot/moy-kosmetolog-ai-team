@@ -13,6 +13,7 @@ class FeatureState(StrEnum):
     TESTING = "testing"
     PROD_READY = "prod_ready"
     PROD_DEPLOYED = "prod_deployed"
+    DESIGN_DONE = "design_done"
     BLOCKED = "blocked"
     FAILED = "failed"
 
@@ -43,6 +44,7 @@ FEATURE_STATE_LABELS_RU: dict[FeatureState, str] = {
     FeatureState.TESTING:         "🧪 Жду твою проверку",
     FeatureState.PROD_READY:      "✅ Готово к проду",
     FeatureState.PROD_DEPLOYED:   "🎉 В проде",
+    FeatureState.DESIGN_DONE:     "🖼 Дизайн готов",
     FeatureState.BLOCKED:         "⛔ Заблокировано — нужен ты",
     FeatureState.FAILED:          "💥 Упало",
 }

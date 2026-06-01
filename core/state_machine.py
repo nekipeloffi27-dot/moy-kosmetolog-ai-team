@@ -28,6 +28,7 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
     FeatureState.DESIGN_REVIEW: {
         FeatureState.TASKS_PENDING,      # user approves design
         FeatureState.DESIGN_PENDING,     # user asks to redo
+        FeatureState.DESIGN_DONE,        # design_only=True — terminal
         FeatureState.FAILED,
     },
     FeatureState.TASKS_PENDING: {
@@ -62,6 +63,7 @@ ALLOWED: dict[FeatureState, set[FeatureState]] = {
         FeatureState.FAILED,
     },
     FeatureState.PROD_DEPLOYED: set(),   # terminal
+    FeatureState.DESIGN_DONE:   set(),   # terminal (design-only flow)
     FeatureState.BLOCKED: {              # human unblocks → resume from a sensible state
         FeatureState.DESIGN_PENDING,
         FeatureState.TASKS_PENDING,
@@ -110,7 +112,7 @@ async def transition(
                 UPDATE features
                 SET state = $1,
                     updated_at = NOW(),
-                    completed_at = CASE WHEN $1::feature_state IN ('prod_deployed','failed','cancelled')
+                    completed_at = CASE WHEN $1::feature_state IN ('prod_deployed','failed','design_done')
                                         THEN NOW() ELSE completed_at END
                 WHERE id = $2
                 """,
