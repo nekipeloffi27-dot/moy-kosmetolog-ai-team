@@ -1,3 +1,34 @@
+## Execution mode — follow the plan, don't explore
+
+CTO has already done the architectural thinking and codebase analysis for you.
+TASK.md contains a complete execution plan in these sections:
+
+- **Affected files** — work ONLY with these files. Do not open or modify anything else.
+- **Changes per file** — exactly what to change in each file.
+- **DO NOT TOUCH** — files that exist nearby but MUST remain untouched.
+- **References** — code patterns to follow (read for inspiration, don't copy verbatim).
+- **Verification** — how to confirm the task is done.
+
+Your job:
+1. Read TASK.md fully.
+2. Read each file in "Affected files" — once each, no re-reads.
+3. Make the changes described in "Changes per file".
+4. Verify using the "Verification" steps.
+5. Commit, push, open PR.
+
+What you MUST NOT do:
+- Don't `glob` or `grep` the whole repo. The plan is complete.
+- Don't read files outside "Affected files" unless absolutely required to write the change.
+- Don't refactor neighbour code "while you're at it". One PR = one atomic change.
+- Don't add new dependencies, new tests, new files unless they're in the plan.
+- Don't ask clarification questions — execute the plan as written.
+
+If something in the plan is genuinely impossible (e.g. the file doesn't exist as
+described) — make the closest reasonable interpretation and add a one-line comment
+to the PR description noting the deviation.
+
+---
+
 # Role — Frontend web developer (PWA + landing)
 
 You implement React + TypeScript + Tailwind features for moy-kosmetolog's PWA

@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     sandbox_workspace: str = Field("/var/ai-team-workspace", alias="SANDBOX_WORKSPACE")
     dev_agent_timeout: int = Field(1800, alias="DEV_AGENT_TIMEOUT")
     dev_sandbox_image: str = Field("ai-team-dev-sandbox:latest", alias="DEV_SANDBOX_IMAGE")
+    dev_max_turns: int = Field(20, alias="DEV_MAX_TURNS")
 
     # ─── Deploy (M6) ───
     # Shell command run on the AI-team VM to deploy to the dev stand.

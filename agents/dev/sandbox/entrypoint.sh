@@ -94,7 +94,7 @@ cd "${WORKDIR}"
 log "Skills available:"
 ls -la /root/.claude/skills/ 2>/dev/null || echo "  (none mounted)" >&2
 
-log "Running Claude Code (model=${MODEL}, rerun=${IS_RERUN:-0})…"
+log "Running Claude Code (model=${MODEL}, rerun=${IS_RERUN:-0}, max_turns=${CLAUDE_MAX_TURNS:-20})…"
 
 PROXY_ENV=""
 if [[ -n "${ANTHROPIC_PROXY_URL:-}" ]]; then
@@ -102,6 +102,8 @@ if [[ -n "${ANTHROPIC_PROXY_URL:-}" ]]; then
     log "Using HTTPS proxy for Claude Code"
 fi
 
+# TODO: add --max-turns "${CLAUDE_MAX_TURNS:-20}" once Claude Code CLI exposes the flag.
+# As of 2026-06-01 the CLI has --max-budget-usd but no --max-turns / --max-iterations.
 env ${PROXY_ENV} ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
     claude \
     --print \

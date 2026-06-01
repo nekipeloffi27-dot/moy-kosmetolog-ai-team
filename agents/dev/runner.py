@@ -152,10 +152,40 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
     task_md = (
         f"# {task.title}\n\n"
         f"{task.description}\n\n"
+        f"**Complexity:** {task.complexity}\n"
+        f"**Expected diff size:** {task.expected_diff_size or 'unknown'}\n\n"
         f"---\n\n## Authoritative API contract\n\n"
         f"{api_contract.get('openapi_diff', '(no API changes)')}\n\n"
-        f"---\n\n## Designer output (reference)\n\n{design_md}\n"
     )
+
+    if task.affected_files:
+        task_md += "---\n\n## Affected files\n\nYou MUST work only with these files:\n\n"
+        for path in task.affected_files:
+            task_md += f"- `{path}`\n"
+        task_md += "\n"
+
+    if task.changes_per_file:
+        task_md += "---\n\n## Changes per file\n\n"
+        for ch in task.changes_per_file:
+            task_md += f"### `{ch['path']}`\n\n{ch['changes']}\n\n"
+
+    if task.do_not_touch:
+        task_md += "---\n\n## DO NOT TOUCH\n\nThese files exist nearby but MUST NOT be modified:\n\n"
+        for path in task.do_not_touch:
+            task_md += f"- `{path}`\n"
+        task_md += "\n"
+
+    if task.references:
+        task_md += "---\n\n## References (read for pattern, don't copy verbatim)\n\n"
+        for ref in task.references:
+            task_md += f"- `{ref['path']}` — {ref['what']}\n"
+        task_md += "\n"
+
+    if task.verification:
+        task_md += f"---\n\n## Verification\n\n{task.verification}\n\n"
+
+    task_md += f"---\n\n## Designer output (reference)\n\n{design_md}\n"
+
     if review_feedback:
         task_md += (
             f"\n\n---\n\n## CTO review feedback (from previous round)\n\n"
@@ -208,6 +238,7 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
         "-e", f"PR_TITLE=[{short_id}] {task.title}",
         "-e", f"ISSUE_NUMBER={task.github_issue_number or ''}",
         "-e", f"IS_RERUN={'1' if is_rerun else '0'}",
+        "-e", f"CLAUDE_MAX_TURNS={settings.dev_max_turns}",
         "-v", f"{prompts_dir}:/prompts:ro",
         "-v", f"{work_dir}:/workspace",
     ]
@@ -223,7 +254,10 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
 
     docker_cmd.append(settings.dev_sandbox_image)
 
-    logger.info("Spawning sandbox: {}", " ".join(shlex.quote(p) for p in docker_cmd))
+    logger.info(
+        "Spawning sandbox for task {} (type={}, complexity={}, model={}, max_turns={})",
+        task.id, task.type.value, task.complexity, model, settings.dev_max_turns,
+    )
 
     proc = await asyncio.create_subprocess_exec(
         *docker_cmd,
