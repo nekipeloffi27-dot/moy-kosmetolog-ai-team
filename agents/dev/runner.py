@@ -38,12 +38,6 @@ REPO_ATTR_BY_TYPE = {
     TaskType.FRONTEND_WEB:    "github_repo_pwa",
     TaskType.FRONTEND_MOBILE: "github_repo_mobile",
 }
-MODEL_ATTR_BY_TYPE = {
-    TaskType.BACKEND:         "model_backend_dev",
-    TaskType.FRONTEND_WEB:    "model_frontend_web_dev",
-    TaskType.FRONTEND_MOBILE: "model_frontend_mobile_dev",
-}
-
 
 @register_agent(FeatureState.CODING)
 async def run_dev_agents(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Pool) -> None:
@@ -108,7 +102,7 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
 
     agent_dir = AGENT_DIR_BY_TYPE[task.type]
     repo_ref = getattr(settings, REPO_ATTR_BY_TYPE[task.type])
-    model = getattr(settings, MODEL_ATTR_BY_TYPE[task.type])
+    model = _model_for_task(task, settings)
     repo, subdir = settings.parse_repo(repo_ref)
     full_repo = f"{settings.github_owner}/{repo}"
 
@@ -316,6 +310,15 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
         parse_mode="HTML",
         disable_web_page_preview=True,
     )
+
+
+def _model_for_task(task, settings) -> str:
+    routing = {
+        "simple":  settings.model_dev_simple,
+        "medium":  settings.model_dev_medium,
+        "complex": settings.model_dev_complex,
+    }
+    return routing.get(task.complexity or "medium", settings.model_dev_medium)
 
 
 def _ensure_writable(path: Path) -> None:

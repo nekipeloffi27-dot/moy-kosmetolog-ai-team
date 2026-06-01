@@ -156,10 +156,11 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
         }.get(t["type"], t["type"])
         complexity = _validated_complexity(t)
         complexity_icon = {"simple": "🟢", "medium": "🟡", "complex": "🔴"}.get(complexity, "⚪")
+        model_label = _model_label_for_complexity(complexity, settings)
         file_count = len(t.get("affected_files") or [])
         file_hint = f" ({file_count} {'файл' if file_count == 1 else 'файла' if 2 <= file_count <= 4 else 'файлов'})" if file_count else ""
         summary_lines.append(
-            f"{i}. {complexity_icon} {complexity} · {type_label} — <b>{t['title']}</b>{file_hint}"
+            f"{i}. {complexity_icon} {complexity} · {model_label} · {type_label} — <b>{t['title']}</b>{file_hint}"
         )
     await bots.cto.send_message(
         chat_id=chat, message_thread_id=thread,
@@ -233,6 +234,23 @@ async def run_cto_tasking(feature_id: UUID, bots: BotRegistry, pool: asyncpg.Poo
                      reason=f"{len(tasks_spec)} tasks created")
 
     await dispatch(feature_id, FeatureState.CODING, bots, pool)
+
+
+def _model_label_for_complexity(complexity: str, settings) -> str:
+    routing = {
+        "simple":  settings.model_dev_simple,
+        "medium":  settings.model_dev_medium,
+        "complex": settings.model_dev_complex,
+    }
+    full = routing.get(complexity, settings.model_dev_medium)
+    # Show short human-readable label: haiku/sonnet/opus
+    if "haiku" in full:
+        return "Haiku"
+    if "sonnet" in full:
+        return "Sonnet"
+    if "opus" in full:
+        return "Opus"
+    return full
 
 
 def _validated_complexity(task_spec: dict) -> str:

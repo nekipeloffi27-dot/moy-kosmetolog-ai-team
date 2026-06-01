@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     model_frontend_web_dev: str = Field("claude-sonnet-4-6", alias="MODEL_FRONTEND_WEB_DEV")
     model_frontend_mobile_dev: str = Field("claude-sonnet-4-6", alias="MODEL_FRONTEND_MOBILE_DEV")
 
+    # ─── Model routing by task complexity ───
+    model_dev_simple: str = Field("claude-haiku-4-5", alias="MODEL_DEV_SIMPLE")
+    model_dev_medium: str = Field("claude-sonnet-4-6", alias="MODEL_DEV_MEDIUM")
+    model_dev_complex: str = Field("claude-sonnet-4-6", alias="MODEL_DEV_COMPLEX")
+
     # ─── GitHub ───
     github_token: str = Field("", alias="GITHUB_TOKEN")
     github_owner: str = Field("", alias="GITHUB_OWNER")
