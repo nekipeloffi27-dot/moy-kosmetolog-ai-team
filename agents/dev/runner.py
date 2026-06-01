@@ -140,8 +140,9 @@ async def _run_one_task(task, feature, pool: asyncpg.Pool, bots: BotRegistry) ->
     test_feedback = feature.context.get("last_test_feedback", "")
     review_feedback = feature.context.get(f"review_feedback_{task.id}", "")
 
-    prompts_dir = Path(settings.sandbox_workspace) / "prompts" / str(feature.id) / task.type.value
-    work_dir = Path(settings.sandbox_workspace) / "work" / str(feature.id) / task.type.value
+    task_slug = f"{task.type.value}-{str(task.id)[:8]}"
+    prompts_dir = Path(settings.sandbox_workspace) / "prompts" / str(feature.id) / task_slug
+    work_dir = Path(settings.sandbox_workspace) / "work" / str(feature.id) / task_slug
     for d in (
         prompts_dir.parent.parent, prompts_dir.parent, prompts_dir,
         work_dir.parent.parent, work_dir.parent, work_dir,
